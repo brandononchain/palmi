@@ -1,0 +1,79 @@
+# ============================================================================
+# palmi .gitignore
+# ============================================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+.expo/
+.expo-shared/
+web-build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# Native
+ios/
+android/
+*.apk
+*.aab
+*.ipa
+*.hprof
+*.jks
+*.keystore
+
+# Supabase
+.supabase/
+**/supabase/.branches/
+**/supabase/.temp/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+.eslintcache
+
+# Misc
+*.pem
+.turbo
+.cache/
+tmp/
+
+# Keep but ignore content
+/outputs/
