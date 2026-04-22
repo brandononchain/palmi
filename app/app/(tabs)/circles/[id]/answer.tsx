@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
+import { moderateAndInsert } from '@/lib/moderation';
 import { useAuth } from '@/hooks/useAuth';
 import type { Uuid, IsoDate } from '@/lib/database.types';
 import { colors, radius, spacing, typography } from '@/theme/tokens';
@@ -135,18 +136,18 @@ export default function AnswerScreen() {
       photoUrl = urlData.publicUrl;
     }
 
-    const { error: insertErr } = await supabase.from('question_answers').insert({
-      question_id: qid,
+    const result = await moderateAndInsert({
       circle_id: circleId,
-      author_id: user.id,
+      content_type: 'answer',
+      question_id: qid,
       body: body.trim() || null,
       photo_url: photoUrl,
     });
 
     setSubmitting(false);
 
-    if (insertErr) {
-      setError(insertErr.message);
+    if (result.verdict === 'reject') {
+      setError(result.reason ?? "This didn't post — please try rewording.");
       return;
     }
 

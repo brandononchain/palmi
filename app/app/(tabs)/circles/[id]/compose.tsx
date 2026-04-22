@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
+import { moderateAndInsert } from '@/lib/moderation';
 import { useAuth } from '@/hooks/useAuth';
 import { colors, radius, spacing, typography } from '@/theme/tokens';
 
@@ -84,17 +85,17 @@ export default function ComposeScreen() {
       photoUrl = urlData.publicUrl;
     }
 
-    const { error: postErr } = await supabase.from('posts').insert({
+    const result = await moderateAndInsert({
       circle_id: circleId,
-      author_id: user.id,
+      content_type: 'post',
       body: body.trim() || null,
       photo_url: photoUrl,
     });
 
     setSubmitting(false);
 
-    if (postErr) {
-      setError(postErr.message);
+    if (result.verdict === 'reject') {
+      setError(result.reason ?? "This didn't post — please try rewording.");
       return;
     }
 

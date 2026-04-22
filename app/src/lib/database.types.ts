@@ -42,6 +42,7 @@ export interface Post {
   author_id: Uuid;
   body: string | null;
   photo_url: string | null;
+  moderation_status: 'ok' | 'held';
   created_at: IsoDate;
   deleted_at: IsoDate | null;
 }
