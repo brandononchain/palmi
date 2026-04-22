@@ -56,6 +56,16 @@ export interface Reaction {
   created_at: IsoDate;
 }
 
+export interface Recap {
+  id: Uuid;
+  circle_id: Uuid;
+  period_start: IsoDate; // YYYY-MM-DD
+  period_end: IsoDate;
+  body: string;
+  source: 'ai' | 'template';
+  created_at: IsoDate;
+}
+
 export interface FeedPost {
   id: Uuid;
   author_id: Uuid;
@@ -78,6 +88,7 @@ export interface Database {
       memberships: { Row: Membership; Insert: Partial<Membership>; Update: Partial<Membership> };
       posts: { Row: Post; Insert: Partial<Post>; Update: Partial<Post> };
       reactions: { Row: Reaction; Insert: Partial<Reaction>; Update: Partial<Reaction> };
+      recaps: { Row: Recap; Insert: Partial<Recap>; Update: Partial<Recap> };
     };
     Functions: {
       create_circle: { Args: { p_name: string }; Returns: Uuid };
