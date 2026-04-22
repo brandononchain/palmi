@@ -6,6 +6,7 @@ import { Button } from '@/components/Button';
 import { TextInput } from '@/components/TextInput';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { registerForPushAsync } from '@/lib/notifications';
 import { colors, spacing, typography } from '@/theme/tokens';
 
 export default function OnboardingScreen() {
@@ -42,6 +43,11 @@ export default function OnboardingScreen() {
       return;
     }
 
+    // Kick off the OS permission prompt. Denial is fine — all circle
+    // notifications are off by default; users can turn them on later per
+    // circle. We never block onboarding on this.
+    void registerForPushAsync(user.id).catch(() => {});
+
     await refreshProfile();
   };
 
@@ -58,6 +64,9 @@ export default function OnboardingScreen() {
             </Text>
             <Text style={styles.lede}>
               This is how you appear to people in your circles. No last names, no usernames. Just you.
+            </Text>
+            <Text style={styles.note}>
+              Notifications stay off by default. You can turn them on later, per circle.
             </Text>
           </View>
 
@@ -107,6 +116,13 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.inkMuted,
     lineHeight: typography.body * typography.lineRelaxed,
+    maxWidth: 320,
+  },
+  note: {
+    fontFamily: typography.fontSerifItalic,
+    fontSize: typography.caption,
+    color: colors.inkFaint,
+    marginTop: spacing.xs,
     maxWidth: 320,
   },
   form: { gap: spacing.md },
