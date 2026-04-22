@@ -1,12 +1,34 @@
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { useAuth } from '@/hooks/useAuth';
+import { registerForPushAsync, sendTestPush } from '@/lib/notifications';
 import { colors, spacing, typography } from '@/theme/tokens';
 
 export default function SettingsScreen() {
-  const { profile, signOut } = useAuth();
+  const { profile, user, signOut } = useAuth();
+  const [testing, setTesting] = useState(false);
+
+  const handleTestPush = async () => {
+    if (!user) return;
+    setTesting(true);
+    const reg = await registerForPushAsync(user.id).catch(() => null);
+    if (!reg || reg.status !== 'granted' || !reg.token) {
+      setTesting(false);
+      Alert.alert(
+        'Notifications are off',
+        'Enable notifications for palmi in your device settings to receive a test.',
+      );
+      return;
+    }
+    const ok = await sendTestPush(user.id);
+    setTesting(false);
+    if (!ok) {
+      Alert.alert('Could not send', 'The test push did not reach Expo. Try again.');
+    }
+  };
 
   return (
     <Screen>
@@ -27,6 +49,12 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.footer}>
+          <View style={styles.debug}>
+            <Text style={styles.debugLabel}>DEBUG</Text>
+            <Button variant="secondary" onPress={handleTestPush} loading={testing}>
+              Send test notification
+            </Button>
+          </View>
           <Button variant="ghost" onPress={signOut}>
             Sign out
           </Button>
@@ -81,5 +109,15 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingBottom: spacing.xl,
+    gap: spacing.md,
+  },
+  debug: {
+    gap: spacing.xs,
+  },
+  debugLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro - 2,
+    color: colors.inkFaint,
+    letterSpacing: 1.5,
   },
 });
