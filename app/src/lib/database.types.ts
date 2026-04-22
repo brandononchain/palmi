@@ -95,6 +95,7 @@ export interface Database {
       create_circle: { Args: { p_name: string }; Returns: Uuid };
       join_circle: { Args: { p_code: string }; Returns: Uuid };
       leave_circle: { Args: { p_circle_id: Uuid }; Returns: void };
+      rename_circle: { Args: { p_circle_id: Uuid; p_name: string }; Returns: void };
       get_circle_feed: {
         Args: { p_circle_id: Uuid; p_before?: IsoDate; p_limit?: number };
         Returns: FeedPost[];
