@@ -1,0 +1,31 @@
+-- ============================================================================
+-- palmi: recap cron
+-- Migration 006: schedule the monthly Recap Writer agent
+-- ============================================================================
+--
+-- The write-recap Edge Function is invoked hourly. The function itself filters
+-- to circles where, in the owner's local timezone:
+--   * the current hour is 09
+--   * today's date is the 1st of the month
+--
+-- We run hourly (not daily) so a single schedule covers every IANA timezone.
+-- This mirrors the curate-question cron pattern (migration 005).
+--
+-- Requires:
+--   * pg_cron (enable in Supabase dashboard)
+--   * pg_net  (enable in Supabase dashboard)
+--   * app.edge_base_url and app.service_role_key db settings (see 005)
+--   * public.invoke_edge_function(text) helper from 005
+-- ============================================================================
+
+-- Schedule: every hour at :00, invoke the recap writer.
+-- Run this AFTER the settings and helper from 005 are in place.
+--
+-- select cron.schedule(
+--   'write-recap-hourly',
+--   '0 * * * *',
+--   $$ select public.invoke_edge_function('write-recap'); $$
+-- );
+
+-- To unschedule later:
+--   select cron.unschedule('write-recap-hourly');
