@@ -62,6 +62,9 @@ palmi/
 │           ├── validator.test.ts 16 passing tests
 │           └── integration.test.ts  8 passing tests
 │
+├── apps/
+│   └── web/                      Next.js 15 — landing page (palmi.app) + /admin dashboard
+│
 ├── preview/                      HTML mockups you can open in a browser
 └── README.md                     you are here
 ```
@@ -194,16 +197,77 @@ Explicit cuts. Write them down so you don't argue with yourself later.
 
 ---
 
+## Landing page (`apps/web`)
+
+`palmi.app` is a Next.js 15 app in `apps/web/`. The landing page is a straight port of `preview/index.html` with `next/font` serving Fraunces + Inter. Both waitlist forms (hero + CTA) hit a server action that inserts into `public.waitlist` via the anon key.
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+# fill NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+# ADMIN_PASSWORD, ADMIN_SESSION_TOKEN (any strong random string)
+
+cd apps/web && npm install
+npm run web:dev   # from repo root
+```
+
+### Deploy to Vercel
+
+1. `vercel link` (from `apps/web/`), select a new project.
+2. **Root directory**: `apps/web`. Framework preset: Next.js.
+3. Env vars (Project Settings → Environment Variables):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (Production only — never expose)
+   - `NEXT_PUBLIC_WAITLIST_COUNT` (`2847` for v1)
+   - `ADMIN_PASSWORD` (shared password; rotate quarterly)
+   - `ADMIN_SESSION_TOKEN` (any long random string; changing it invalidates all sessions)
+4. Add the `palmi.app` domain (apex + `www`) in Vercel → Domains. Point your registrar's DNS to Vercel's nameservers or their A/ALIAS records.
+5. Run migration 010 (waitlist) on the Supabase project so inserts land somewhere.
+
+**Deployed URL**: _TBD — add after first deploy_
+
+---
+
+## Analytics — what's tracked and why
+
+palmi runs **no third-party analytics**. No GA, no Mixpanel, no Segment, no PostHog cloud. Every number in the admin dashboard is a SQL view over tables you already see (`posts`, `reactions`, `daily_questions`, `question_answers`, `profiles`, `memberships`, `fallback_questions`). Nothing new is logged.
+
+**What we look at:**
+
+| Metric | Why |
+|---|---|
+| DAU / WAU (30d / 12w) | Is the app being opened in any meaningful way? |
+| Retention cohorts by signup week | Do people stick, or drop off after week 2? |
+| Overall median posts per circle per week | Are circles actually posting, or is it a ghost town? |
+| % of daily questions with ≥1 answer | Is the core ritual working? |
+| Time to first post after circle creation | Is the onboarding → first-value gap too long? |
+| Reaction usage by kind | Which of the four emoji are pulling weight? |
+| Top fallback questions | What to clone when growing the bank |
+| Waitlist signup count | Pre-launch demand |
+
+**What we explicitly don't log:**
+
+- **No post bodies, answer bodies, photo contents, or question text in user activity views.** The only free-text the dashboard displays is the fallback question bank, which is shared, content-reviewed by us, and not PII.
+- **No per-user activity rows anywhere in the UI.** The `user_activity` view exists only as a building block for aggregate counts; it's never displayed.
+- **No per-circle breakdowns.** Median across circles only — you cannot single a circle out from the dashboard.
+- **No feed-view tracking.** Scrolling the feed is not instrumented and never will be.
+- **Small-N thresholds.** Time-to-first-post requires ≥5 eligible circles; posts-per-circle requires ≥3 circles per week. Below those, the view returns zero rows.
+
+**Access:** views live in the `analytics` Postgres schema, granted only to `service_role`. The admin dashboard at `palmi.app/admin` is gated by a shared password + HttpOnly signed cookie. Not exposed to the mobile app.
+
+If anything here starts to feel like surveillance in practice, yank it. The instrumentation exists to answer "is this working?" — not to track people.
+
+---
+
 ## Still to build
 
 **Priority order if you're picking up from here:**
 
-1. Answer composer screen for daily questions
-2. Circle info/members screen
-3. Expo Push notifications (off by default per brand; opt-in per-circle)
-4. Agent 2: Recap Writer — monthly per-circle recap
-5. Agent 3: Moderator — pre-publication safety classifier
-6. Landing page + waitlist
+1. Register cron schedules (curator + recap) in Supabase dashboard
+2. Live moderator smoke test against Anthropic API
+3. Buy palmi.app domain and deploy `apps/web` to Vercel
+4. Materialized-view-backed waitlist counter (replace hardcoded 2,847)
+5. Stretch: Supabase-session auth for `/admin` once we have >1 admin
 
 ---
 
