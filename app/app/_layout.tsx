@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { useAuth } from '@/hooks/useAuth';
+import { registerForPushAsync } from '@/lib/notifications';
 import { colors } from '@/theme/tokens';
 
 export default function RootLayout() {
@@ -33,6 +34,14 @@ export default function RootLayout() {
       router.replace('/(tabs)/circles');
     }
   }, [session, profile, initialized, segments]);
+
+  // Refresh push token on app launch for signed-in users. No-op if the
+  // user previously denied permission.
+  useEffect(() => {
+    if (session?.user?.id && profile) {
+      void registerForPushAsync(session.user.id).catch(() => {});
+    }
+  }, [session?.user?.id, profile]);
 
   if (!initialized) {
     return (
