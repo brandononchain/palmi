@@ -7,7 +7,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
   const [email, setEmail] = useState('');
-  const [emailOptIn, setEmailOptIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState(
     "Thanks. You're on the list — we'll be in touch when there's a spot for you."
@@ -27,7 +26,6 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
       const fd = new FormData();
       fd.set('email', trimmed);
       fd.set('source', source);
-      fd.set('emailOptIn', emailOptIn ? 'true' : 'false');
       fd.set('company', '');
       const res = await joinWaitlist(fd);
       if (res.ok) {
@@ -82,22 +80,6 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
             {pending ? 'Sending' : 'Request access'}
           </button>
         </div>
-
-        <label className="waitlist-consent">
-          <input
-            type="checkbox"
-            name="emailOptIn"
-            checked={emailOptIn}
-            onChange={(e) => setEmailOptIn(e.target.checked)}
-            disabled={pending}
-          />
-          <span className="waitlist-consent-copy">
-            <span className="waitlist-consent-text">
-              Email me when access opens and for a few careful updates.
-            </span>
-            <span className="waitlist-note">No spam. No sharing. Unsubscribe anytime.</span>
-          </span>
-        </label>
       </form>
       {error && (
         <div className="form-error" role="alert">

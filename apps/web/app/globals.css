@@ -227,39 +227,6 @@ h1 em {
   max-width: 440px;
 }
 
-.waitlist-consent {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: start;
-  column-gap: 12px;
-  margin-top: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--ink-muted);
-}
-
-.waitlist-consent input {
-  width: 16px;
-  height: 16px;
-  margin: 2px 0 0;
-  accent-color: var(--ink);
-}
-
-.waitlist-consent-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.waitlist-consent-text {
-  display: block;
-}
-
-.waitlist-note {
-  font-size: 12px;
-  color: var(--ink-faint);
-  display: block;
-}
-
 .waitlist-honeypot {
   position: absolute;
   left: -9999px;
@@ -332,11 +299,6 @@ h1 em {
 }
 .cta .form-error {
   color: #f5b5a8;
-}
-
-.cta .waitlist-consent,
-.cta .waitlist-note {
-  color: rgba(250, 249, 246, 0.78);
 }
 
 .meta {

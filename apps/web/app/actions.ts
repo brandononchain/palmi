@@ -24,13 +24,6 @@ async function findWaitlistEntry(email: string) {
   return data;
 }
 
-function wantsWaitlistEmails(formData: FormData) {
-  const raw = String(formData.get('emailOptIn') ?? '')
-    .trim()
-    .toLowerCase();
-  return raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes';
-}
-
 function waitlistFunctionUrl() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrl) throw new Error('Missing Supabase public env vars');
@@ -63,7 +56,7 @@ export async function joinWaitlist(formData: FormData): Promise<JoinWaitlistResu
     .toLowerCase();
   const campusRaw = String(formData.get('campus') ?? '').trim();
   const source = String(formData.get('source') ?? 'hero');
-  const emailOptIn = wantsWaitlistEmails(formData);
+  const emailOptIn = true;
   const honeypot = String(formData.get(WAITLIST_HONEYPOT_FIELD) ?? '').trim();
 
   if (honeypot) {
@@ -135,9 +128,7 @@ export async function joinWaitlist(formData: FormData): Promise<JoinWaitlistResu
     }
 
     const shouldSendConfirmation = emailOptIn && !existing?.confirmation_email_sent_at;
-    let message = emailOptIn
-      ? 'Check your inbox for a confirmation from Palmi.'
-      : "You're on the list. We'll reach out when there's a spot for you.";
+    let message = 'Check your inbox for a confirmation from Palmi.';
 
     if (shouldSendConfirmation) {
       try {

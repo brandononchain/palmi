@@ -68,8 +68,7 @@ export default function PrivacyPage() {
             your circles.
           </li>
           <li>
-            <strong>Contact info.</strong> If you join our waitlist, your email address and whether
-            you opted into waitlist emails.
+            <strong>Contact info.</strong> If you join our waitlist, your email address.
           </li>
         </ul>
 
@@ -106,7 +105,7 @@ export default function PrivacyPage() {
           <li>To run the app: sign you in, show your circle its posts, deliver notifications.</li>
           <li>To keep people safe: prevent spam, abuse, and impersonation.</li>
           <li>To improve the product: aggregate, de-identified usage patterns only.</li>
-          <li>To email you about access and launch updates, if you explicitly asked us to.</li>
+          <li>To email you about access and launch updates tied to your waitlist request.</li>
           <li>To contact you about your account or a serious product change.</li>
         </ul>
         <p>
