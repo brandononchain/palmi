@@ -91,10 +91,14 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
             onChange={(e) => setEmailOptIn(e.target.checked)}
             disabled={pending}
           />
-          <span>Email me when access opens and for a few careful updates.</span>
+          <span className="waitlist-consent-copy">
+            <span className="waitlist-consent-text">
+              Email me when access opens and for a few careful updates.
+            </span>
+            <span className="waitlist-note">No spam. No sharing. Unsubscribe anytime.</span>
+          </span>
         </label>
       </form>
-      <div className="waitlist-note">No spam. No sharing. Unsubscribe anytime.</div>
       {error && (
         <div className="form-error" role="alert">
           {error}
