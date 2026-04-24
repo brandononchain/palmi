@@ -32,7 +32,8 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
   if (done) {
     return (
       <div className="form-success show" role="status">
-        Thanks. You&rsquo;re on the list &mdash; we&rsquo;ll reach out when your campus opens.
+        Thanks. You&rsquo;re on the list &mdash; we&rsquo;ll be in touch when there&rsquo;s a spot
+        for you.
       </div>
     );
   }
@@ -44,7 +45,7 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
           type="email"
           name="email"
           className="input"
-          placeholder="you@school.edu"
+          placeholder="you@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={error ? 'true' : 'false'}

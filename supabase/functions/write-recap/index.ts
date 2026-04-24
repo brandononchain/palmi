@@ -18,13 +18,16 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 // @ts-ignore deno imports
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { callLlm } from '../_shared/llm.ts';
 
 // @ts-ignore deno globals
 declare const Deno: { env: { get(key: string): string | undefined } };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+// Kept for backwards compatibility with the skip-if-missing guard below;
+// actual HTTP traffic is routed through the shared LLM client.
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const RUN_HOUR_LOCAL = 9;
@@ -77,6 +80,7 @@ interface PostCtx {
 }
 
 interface RecapContext {
+  circle_id: string;
   circle_name: string;
   period_label: string; // e.g. "March 2026"
   members: MemberCtx[];
@@ -139,7 +143,10 @@ export type ValidateResult = ValidateOk | ValidateFail;
 export function validateRecap(raw: string, memberFirstNames: string[]): ValidateResult {
   let parsed: any;
   try {
-    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    const cleaned = raw
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '');
     parsed = JSON.parse(cleaned);
   } catch {
     return { ok: false, reason: 'not_valid_json' };
@@ -235,52 +242,42 @@ function joinNames(names: string[]): string {
 }
 
 // ----------------------------------------------------------------------------
-// Anthropic call
+// Anthropic call via shared LLM client. Handles retry, cost accounting,
+// and the llm_calls observability row.
 // ----------------------------------------------------------------------------
 async function generateRecap(
   ctx: RecapContext
 ): Promise<{ recap: string; tone: ValidateOk['tone'] } | null> {
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 800,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildUserPrompt(ctx) }],
-        temperature: 0.9,
-      }),
+  const resp = await callLlm({
+    agent: 'write-recap',
+    model: MODEL,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: buildUserPrompt(ctx) }],
+    maxTokens: 800,
+    temperature: 0.9,
+    // Recaps run in the background at 9am local; allow more time.
+    timeoutMs: 30_000,
+    circleId: ctx.circle_id,
+  });
+  if (!resp.text) {
+    console.warn('recap_llm_failed', {
+      status: resp.status,
+      httpStatus: resp.httpStatus,
+      reason: resp.errorReason,
+      attempts: resp.attempts,
     });
-
-    if (!res.ok) {
-      console.error(`anthropic_error status=${res.status} body=${await res.text()}`);
-      return null;
-    }
-
-    const data = await res.json();
-    const text = data?.content?.[0]?.text;
-    if (!text) {
-      console.error('anthropic_no_content', data);
-      return null;
-    }
-
-    const names = ctx.members.map((m) => m.first_name);
-    const result = validateRecap(text, names);
-    if (!result.ok) {
-      console.warn(`validation_failed reason=${result.reason} raw=${text}`);
-      return null;
-    }
-
-    return { recap: result.recap, tone: result.tone };
-  } catch (err) {
-    console.error('generate_error', err);
     return null;
   }
+  const names = ctx.members.map((m) => m.first_name);
+  const result = validateRecap(resp.text, names);
+  if (!result.ok) {
+    console.warn('recap_validation_failed', {
+      reason: result.reason,
+      raw: resp.text.slice(0, 200),
+    });
+    return null;
+  }
+  return { recap: result.recap, tone: result.tone };
 }
 
 // ----------------------------------------------------------------------------
@@ -486,6 +483,7 @@ serve(async (req) => {
       .slice(0, 10);
 
     const ctx: RecapContext = {
+      circle_id: circle.id,
       circle_name: circle.name,
       period_label: period.label,
       members,

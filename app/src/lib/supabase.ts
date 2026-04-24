@@ -23,4 +23,4 @@ export const supabase = createClient<Database>(url, anonKey, {
     persistSession: true,
     detectSessionInUrl: false, // RN, no browser
   },
-});
+}) as any;

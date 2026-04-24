@@ -12,18 +12,30 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Screen } from '@/components/Screen';
+import { UpgradeSheet } from '@/components/UpgradeSheet';
+import { useAuth, isPremium } from '@/hooks/useAuth';
+import { startCheckout } from '@/lib/billing';
 import { supabase } from '@/lib/supabase';
 import type { Recap } from '@/lib/database.types';
 import { colors, radius, spacing, typography } from '@/theme/tokens';
 
+// Free users see only recaps whose period_start is within the last 30 days
+// (i.e. the current / most recent month). Older ones are visible as locked
+// rows that open the upgrade sheet instead.
+const FREE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 export default function RecapsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const profile = useAuth((s) => s.profile);
+  const premium = isPremium(profile);
 
   const [recaps, setRecaps] = useState<Recap[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState<Recap | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -40,6 +52,24 @@ export default function RecapsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      await startCheckout({ kind: 'individual', tier: 'premium' });
+      setShowUpgrade(false);
+    } catch {
+      // swallow; user can retry
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
+  const isLocked = (r: Recap): boolean => {
+    if (premium) return false;
+    const start = new Date(r.period_start).getTime();
+    return Date.now() - start > FREE_WINDOW_MS;
+  };
 
   if (loading) {
     return (
@@ -63,7 +93,10 @@ export default function RecapsScreen() {
           </Text>
           <View style={styles.headerSpacer} />
         </View>
-        <ScrollView contentContainerStyle={styles.readerContent}>
+        <ScrollView
+          contentContainerStyle={styles.readerContent}
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.readerLabel}>a note from the month</Text>
           <Text style={styles.readerBody}>{open.body}</Text>
         </ScrollView>
@@ -84,9 +117,33 @@ export default function RecapsScreen() {
       <FlatList
         data={recaps}
         keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={styles.gap} />}
-        renderItem={({ item }) => <RecapRow recap={item} onOpen={() => setOpen(item)} />}
+        ListHeaderComponent={
+          !premium && recaps.some(isLocked) ? (
+            <Pressable
+              onPress={() => setShowUpgrade(true)}
+              style={({ pressed }) => [styles.banner, pressed && styles.rowPressed]}
+            >
+              <Text style={styles.bannerLabel}>keep every month</Text>
+              <Text style={styles.bannerBody}>
+                free circles keep the current month. premium unlocks every recap, forever.
+              </Text>
+              <Text style={styles.bannerCta}>upgrade · $4/mo</Text>
+            </Pressable>
+          ) : null
+        }
+        renderItem={({ item }) => {
+          const locked = isLocked(item);
+          return (
+            <RecapRow
+              recap={item}
+              locked={locked}
+              onOpen={() => (locked ? setShowUpgrade(true) : setOpen(item))}
+            />
+          );
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -105,22 +162,50 @@ export default function RecapsScreen() {
           </View>
         }
       />
+
+      <UpgradeSheet
+        visible={showUpgrade}
+        variant="recap-history"
+        onClose={() => setShowUpgrade(false)}
+        onUpgrade={handleUpgrade}
+        loading={upgrading}
+      />
     </Screen>
   );
 }
 
-function RecapRow({ recap, onOpen }: { recap: Recap; onOpen: () => void }) {
+function RecapRow({
+  recap,
+  locked,
+  onOpen,
+}: {
+  recap: Recap;
+  locked: boolean;
+  onOpen: () => void;
+}) {
   const preview = recap.body.length > 140 ? recap.body.slice(0, 140).trimEnd() + '…' : recap.body;
   return (
     <Pressable
       onPress={onOpen}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [
+        styles.row,
+        locked && styles.rowLocked,
+        pressed && styles.rowPressed,
+      ]}
     >
       <Text style={styles.rowLabel}>{formatPeriod(recap.period_start).toUpperCase()}</Text>
-      <Text style={styles.rowPreview} numberOfLines={3}>
-        {preview}
-      </Text>
-      <Text style={styles.rowHint}>tap to read</Text>
+      {locked ? (
+        <Text style={styles.rowLockedHint}>
+          part of the history your circle built together. unlock with premium.
+        </Text>
+      ) : (
+        <>
+          <Text style={styles.rowPreview} numberOfLines={3}>
+            {preview}
+          </Text>
+          <Text style={styles.rowHint}>tap to read</Text>
+        </>
+      )}
     </Pressable>
   );
 }
@@ -192,6 +277,43 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: colors.bgPanel,
+  },
+  rowLocked: {
+    backgroundColor: colors.bgPanel,
+  },
+  rowLockedHint: {
+    fontFamily: typography.fontSerifItalic,
+    fontSize: typography.body,
+    color: colors.inkMuted,
+    lineHeight: typography.body * typography.lineRelaxed,
+  },
+  banner: {
+    backgroundColor: colors.bgPanel,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  bannerLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro - 2,
+    color: colors.accent,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  bannerBody: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.body,
+    color: colors.ink,
+    lineHeight: typography.body * typography.lineRelaxed,
+  },
+  bannerCta: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.caption,
+    color: colors.accent,
+    marginTop: spacing.xxs,
   },
   rowLabel: {
     fontFamily: typography.fontSansMedium,

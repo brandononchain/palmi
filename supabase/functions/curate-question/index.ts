@@ -18,13 +18,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 // @ts-ignore deno imports
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { callLlm } from '../_shared/llm.ts';
+import { getCuratorVariant, type CuratorVariant } from '../_shared/curatorVariants.ts';
 
 // @ts-ignore deno globals
 declare const Deno: { env: { get(key: string): string | undefined } };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const DROP_HOUR_LOCAL = 9; // 9am in the circle's timezone
@@ -71,9 +72,24 @@ interface CircleContext {
   recent_questions: string[]; // last 14 so we don't repeat
   day_of_week: string;
   local_date: string;
+  // Adaptive curator (Phase 1.5). Null = legacy circle, no profile yet.
+  variant: CuratorVariant;
+  subtopics: string[];
+  vibe_keywords: string[];
+}
+
+function buildSystemPrompt(variant: CuratorVariant): string {
+  if (!variant.systemFragment) return SYSTEM_PROMPT;
+  return `${SYSTEM_PROMPT}\n\n${variant.systemFragment}`;
 }
 
 function buildUserPrompt(ctx: CircleContext): string {
+  const subtopicsLine = ctx.subtopics.length
+    ? `- Circle subtopics: ${ctx.subtopics.join(', ')}\n`
+    : '';
+  const vibeLine = ctx.vibe_keywords.length
+    ? `- Vibe keywords: ${ctx.vibe_keywords.join(', ')}\n`
+    : '';
   return `Generate today's question for a circle.
 
 Context:
@@ -82,6 +98,8 @@ Context:
 - Size: ${ctx.member_count} members
 - Activity: ${ctx.posts_last_7d} posts in the last 7 days
 - Today: ${ctx.day_of_week}, ${ctx.local_date}
+${subtopicsLine}${vibeLine}
+Variant guidance: ${ctx.variant.userPromptHint}
 
 Recent questions this circle has seen (DO NOT repeat these themes):
 ${ctx.recent_questions.length ? ctx.recent_questions.map((q, i) => `  ${i + 1}. ${q}`).join('\n') : '  (none yet)'}
@@ -97,11 +115,16 @@ Output the JSON object now.`;
 // ----------------------------------------------------------------------------
 // Quality gates — the AI output passes these or we fall back.
 // ----------------------------------------------------------------------------
-function validateQuestion(raw: string): { ok: true; text: string; tag: string } | { ok: false; reason: string } {
+function validateQuestion(
+  raw: string
+): { ok: true; text: string; tag: string } | { ok: false; reason: string } {
   let parsed: any;
   try {
     // Strip markdown code fences if the model wrapped output
-    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    const cleaned = raw
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '');
     parsed = JSON.parse(cleaned);
   } catch {
     return { ok: false, reason: 'not_valid_json' };
@@ -138,56 +161,51 @@ function validateQuestion(raw: string): { ok: true; text: string; tag: string } 
 }
 
 // ----------------------------------------------------------------------------
-// Anthropic API call
+// Anthropic API call via the shared client. The shared client handles retry,
+// timeouts, cost accounting, and the llm_calls observability row.
 // ----------------------------------------------------------------------------
 async function generateQuestion(ctx: CircleContext): Promise<{ text: string; tag: string } | null> {
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 200,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildUserPrompt(ctx) }],
-        temperature: 1.0, // we want variety
-      }),
+  const resp = await callLlm({
+    agent: 'curate-question',
+    model: MODEL,
+    system: buildSystemPrompt(ctx.variant),
+    messages: [{ role: 'user', content: buildUserPrompt(ctx) }],
+    maxTokens: 200,
+    temperature: 1.0,
+    circleId: ctx.circle_id,
+    metadata: {
+      variant: ctx.variant.id,
+      subtopics: ctx.subtopics,
+    },
+  });
+  if (!resp.text) {
+    console.warn('curate_llm_failed', {
+      status: resp.status,
+      httpStatus: resp.httpStatus,
+      reason: resp.errorReason,
+      attempts: resp.attempts,
     });
-
-    if (!res.ok) {
-      console.error(`anthropic_error status=${res.status} body=${await res.text()}`);
-      return null;
-    }
-
-    const data = await res.json();
-    const text = data?.content?.[0]?.text;
-    if (!text) {
-      console.error('anthropic_no_content', data);
-      return null;
-    }
-
-    const result = validateQuestion(text);
-    if (!result.ok) {
-      console.warn(`validation_failed reason=${result.reason} raw=${text}`);
-      return null;
-    }
-
-    return { text: result.text, tag: result.tag };
-  } catch (err) {
-    console.error('generate_error', err);
     return null;
   }
+  const result = validateQuestion(resp.text);
+  if (!result.ok) {
+    console.warn('validation_failed', { reason: result.reason, raw: resp.text.slice(0, 200) });
+    return null;
+  }
+  return { text: result.text, tag: result.tag };
 }
 
 // ----------------------------------------------------------------------------
 // Fallback: grab a question from the human-curated bank.
 // Prefer least-recently-used + tag diversity from recent questions.
+// Phase 1.6: filter by circle purpose when one is set; fall back to friends/
+// mixed pool if no purpose-tagged candidates are left over.
 // ----------------------------------------------------------------------------
-async function fallbackQuestion(supa: any, circleId: string): Promise<string> {
+async function fallbackQuestion(
+  supa: any,
+  circleId: string,
+  purpose: string | null
+): Promise<string> {
   // Get last 14 questions asked to this circle (for variety)
   const { data: recent } = await supa
     .from('daily_questions')
@@ -198,13 +216,29 @@ async function fallbackQuestion(supa: any, circleId: string): Promise<string> {
 
   const recentTexts = new Set<string>((recent ?? []).map((r: any) => r.question_text));
 
-  // Pull active bank, ordered by least-used
-  const { data: bank } = await supa
-    .from('fallback_questions')
-    .select('id, question_text, times_used')
-    .eq('active', true)
-    .order('times_used', { ascending: true })
-    .limit(30);
+  // Try purpose-tagged pool first.
+  let bank: Array<{ id: string; question_text: string; times_used: number }> | null = null;
+  if (purpose) {
+    const { data } = await supa
+      .from('fallback_questions')
+      .select('id, question_text, times_used')
+      .eq('active', true)
+      .contains('purpose', [purpose])
+      .order('times_used', { ascending: true })
+      .limit(30);
+    if (data && data.length > 0) bank = data;
+  }
+
+  // Fall back to the friends/mixed pool (or unfiltered if even that is empty).
+  if (!bank || bank.length === 0) {
+    const { data } = await supa
+      .from('fallback_questions')
+      .select('id, question_text, times_used')
+      .eq('active', true)
+      .order('times_used', { ascending: true })
+      .limit(30);
+    bank = data ?? null;
+  }
 
   if (!bank || bank.length === 0) {
     return 'What are you up to today?'; // last-resort hardcoded fallback
@@ -256,28 +290,43 @@ function localDateInTz(timezone: string): string {
 }
 
 function dayOfWeek(timezone: string): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long' }).format(new Date());
+  return new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long' }).format(
+    new Date()
+  );
 }
 
 // ----------------------------------------------------------------------------
 // Main handler
 // ----------------------------------------------------------------------------
 serve(async (req) => {
-  // Only accept POST (pg_cron uses POST) — and require a shared secret
+  if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') {
     return new Response('method not allowed', { status: 405 });
   }
+
+  // Manual override for testing: { force: true, circle_id?: string }.
+  // Empty body (cron) uses the normal hour-gated path.
+  let override: { force?: boolean; circle_id?: string } = {};
+  try {
+    override = await req.json();
+  } catch {
+    /* empty body ok */
+  }
+  const force = override?.force === true;
+  const onlyCircle = typeof override?.circle_id === 'string' ? override.circle_id : null;
 
   const supa = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
   // Get all active circles with at least one member
-  const { data: circles, error } = await supa
+  let q = supa
     .from('circles')
     .select('id, name, created_at, member_count')
     .is('deleted_at', null)
     .gt('member_count', 0);
+  if (onlyCircle) q = q.eq('id', onlyCircle);
+  const { data: circles, error } = await q;
 
   if (error) {
     console.error('fetch_circles_error', error);
@@ -313,8 +362,8 @@ serve(async (req) => {
 
     const tz = ownerProfile?.timezone ?? 'UTC';
 
-    // Only generate if local time is in our drop hour
-    if (!isDropHourNow(tz)) {
+    // Only generate if local time is in our drop hour (unless forced)
+    if (!force && !isDropHourNow(tz)) {
       stats.skipped++;
       continue;
     }
@@ -328,13 +377,16 @@ serve(async (req) => {
       .eq('drops_on', localDate)
       .maybeSingle();
 
-    if (existing) {
+    if (existing && !force) {
       stats.skipped++;
       continue;
     }
+    if (existing && force) {
+      await supa.from('daily_questions').delete().eq('id', existing.id);
+    }
 
     // Gather context for the AI
-    const [recentQs, recentPosts] = await Promise.all([
+    const [recentQs, recentPosts, profileRes] = await Promise.all([
       supa
         .from('daily_questions')
         .select('question_text')
@@ -346,19 +398,32 @@ serve(async (req) => {
         .select('id', { count: 'exact', head: true })
         .eq('circle_id', circle.id)
         .gte('created_at', new Date(Date.now() - 7 * 86400 * 1000).toISOString()),
+      supa
+        .from('circle_profile')
+        .select('purpose, subtopics, vibe_keywords')
+        .eq('circle_id', circle.id)
+        .maybeSingle(),
     ]);
+
+    const profile = profileRes.data as {
+      purpose: string;
+      subtopics: string[];
+      vibe_keywords: string[];
+    } | null;
+    const variant = getCuratorVariant(profile?.purpose);
 
     const ctx: CircleContext = {
       circle_id: circle.id,
       circle_name: circle.name,
-      circle_age_days: Math.floor(
-        (Date.now() - new Date(circle.created_at).getTime()) / 86400000
-      ),
+      circle_age_days: Math.floor((Date.now() - new Date(circle.created_at).getTime()) / 86400000),
       member_count: circle.member_count,
       posts_last_7d: recentPosts.count ?? 0,
       recent_questions: (recentQs.data ?? []).map((r: any) => r.question_text),
       day_of_week: dayOfWeek(tz),
       local_date: localDate,
+      variant,
+      subtopics: profile?.subtopics ?? [],
+      vibe_keywords: profile?.vibe_keywords ?? [],
     };
 
     // Try AI, fall back on failure
@@ -371,7 +436,7 @@ serve(async (req) => {
       source = 'ai';
       stats.ai++;
     } else {
-      questionText = await fallbackQuestion(supa, circle.id);
+      questionText = await fallbackQuestion(supa, circle.id, profile?.purpose ?? null);
       source = 'fallback';
       stats.fallback++;
     }

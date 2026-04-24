@@ -17,7 +17,10 @@ export default function LandingPage() {
           <div className="nav-links">
             <a href="#how">How it works</a>
             <a href="#manifesto">Manifesto</a>
-            <a href="#waitlist" className="nav-cta">Request access</a>
+            <a href="/pricing">Pricing</a>
+            <a href="#waitlist" className="nav-cta">
+              Request access
+            </a>
           </div>
         </div>
       </nav>
@@ -28,15 +31,19 @@ export default function LandingPage() {
           <div>
             <span className="eyebrow">
               <span className="eyebrow-dot" />
-              Rolling out to select campuses, fall 2026
+              Invite-only &middot; rolling access
             </span>
             <h1>
-              a quiet place<br />
+              a quiet place
+              <br />
               for your <em>people</em>.
             </h1>
             <p className="lede">
-              Small circles of 5 to 15 friends. One question a day you answer together. Nothing to scroll through, no
-              one to impress. Chronological. Invite-only. Calm.
+              Small circles of 5&ndash;15.
+              <br />
+              One question a day.
+              <br />
+              No feed. No noise. Just real connection.
             </p>
 
             <WaitlistForm source="hero" />
@@ -48,7 +55,7 @@ export default function LandingPage() {
                 <span className="meta-dot" />
                 <span className="meta-dot" />
               </div>
-              <span>{WAITLIST_COUNT} people waiting</span>
+              <span>{WAITLIST_COUNT} waiting for access</span>
             </div>
           </div>
 
@@ -56,54 +63,157 @@ export default function LandingPage() {
             <div className="phone">
               <div className="phone-notch" />
               <div className="phone-screen">
-                <div className="phone-header">
-                  <div className="phone-circle-name">dorm 4B</div>
-                  <div className="phone-members">
-                    <span className="phone-member" />
-                    <span className="phone-member" />
-                    <span className="phone-member" />
-                  </div>
+                {/* Mirrors the real app/app/(tabs)/home.tsx UX: serif greeting,
+                    "your circles" row with see-all, recent activity list,
+                    bottom tab bar. */}
+                <div className="phone-statusbar">
+                  <span className="phone-sb-time">9:41</span>
+                  <span className="phone-statusbar-icons">
+                    <svg
+                      className="phone-sb-icon"
+                      viewBox="0 0 17 11"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <rect x="0" y="7" width="3" height="4" rx="0.6" />
+                      <rect x="4.5" y="5" width="3" height="6" rx="0.6" />
+                      <rect x="9" y="2.5" width="3" height="8.5" rx="0.6" />
+                      <rect x="13.5" y="0" width="3" height="11" rx="0.6" />
+                    </svg>
+                    <svg
+                      className="phone-sb-icon"
+                      viewBox="0 0 15 11"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.1"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M1 3.8a10 10 0 0 1 13 0" />
+                      <path d="M3 6.2a7 7 0 0 1 9 0" />
+                      <path d="M5 8.6a4 4 0 0 1 5 0" />
+                      <circle cx="7.5" cy="10.2" r="0.7" fill="currentColor" stroke="none" />
+                    </svg>
+                    <span className="phone-sb-batt" aria-hidden="true">
+                      <span className="phone-sb-batt-fill" />
+                    </span>
+                  </span>
                 </div>
 
-                <div className="phone-qcard">
-                  <div className="phone-qlabel">Today&rsquo;s question</div>
-                  <div className="phone-qtext">What&rsquo;s on your desk right now?</div>
-                  <div className="phone-qresponses">
-                    <div className="phone-qavs">
-                      <span className="phone-qav" />
-                      <span className="phone-qav" />
+                <div className="phone-body">
+                  <h3 className="phone-greeting">
+                    good evening,
+                    <br />
+                    maya.
+                  </h3>
+
+                  <div className="phone-section-head">
+                    <span className="phone-section-label">your circles</span>
+                    <span className="phone-section-link">see all</span>
+                  </div>
+
+                  <div className="phone-circles-row">
+                    <div className="phone-circle-card">
+                      <span className="phone-circle-card-name">the group chat</span>
+                      <span className="phone-circle-card-meta">6 people</span>
                     </div>
-                    <span>2 of 6 answered</span>
+                    <div className="phone-circle-card">
+                      <span className="phone-circle-card-name">studio 3</span>
+                      <span className="phone-circle-card-meta">4 people</span>
+                    </div>
+                  </div>
+
+                  <div className="phone-divider" />
+
+                  <div className="phone-section-label">recent activity</div>
+
+                  <div className="phone-activity">
+                    <div className="phone-activity-head">
+                      <span className="phone-activity-circle">the group chat</span>
+                      <span className="phone-activity-time">2h ago</span>
+                    </div>
+                    <div className="phone-activity-body">
+                      a mug, three pens that don&rsquo;t work, and a very judgmental cat
+                    </div>
+                    <div className="phone-activity-author">jordan</div>
+                  </div>
+
+                  <div className="phone-activity">
+                    <div className="phone-activity-head">
+                      <span className="phone-activity-circle">studio 3</span>
+                      <span className="phone-activity-time">yesterday</span>
+                    </div>
+                    <div className="phone-activity-body">
+                      finished the chorus. finally sounds like the song in my head.
+                    </div>
+                    <div className="phone-activity-author">sam</div>
+                  </div>
+
+                  <div className="phone-activity">
+                    <div className="phone-activity-head">
+                      <span className="phone-activity-circle">sunday runs</span>
+                      <span className="phone-activity-time">yesterday</span>
+                    </div>
+                    <div className="phone-activity-body phone-activity-body-italic">
+                      shared a photo
+                    </div>
+                    <div className="phone-activity-author">ava</div>
                   </div>
                 </div>
 
-                <div className="phone-post">
-                  <div className="phone-post-head">
-                    <div className="phone-post-av" style={{ background: '#E8C5A0' }} />
-                    <div className="phone-post-name">maya</div>
-                    <div className="phone-post-time">2h</div>
+                <div className="phone-tabbar">
+                  <div className="phone-tab phone-tab-active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path
+                        d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                    <span>home</span>
                   </div>
-                  <div
-                    className="phone-post-img"
-                    style={{ background: 'linear-gradient(135deg, #D8C5A8, #C4A57E)' }}
-                  />
-                  <div className="phone-post-text">golden hour on the walk home</div>
-                </div>
-
-                <div className="phone-post">
-                  <div className="phone-post-head">
-                    <div className="phone-post-av" style={{ background: '#B8B0D8' }} />
-                    <div className="phone-post-name">jordan</div>
-                    <div className="phone-post-time">5h</div>
+                  <div className="phone-tab">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <circle cx="12" cy="12" r="8" />
+                    </svg>
+                    <span>circles</span>
                   </div>
-                  <div className="phone-post-text" style={{ color: 'var(--ink)' }}>
-                    spent 40 minutes explaining a dream to my roommate and she said &ldquo;that&rsquo;s just
-                    tuesday&rdquo;
+                  <div className="phone-tab">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <circle cx="9" cy="9" r="3" />
+                      <circle cx="17" cy="10" r="2.3" />
+                      <path d="M3 19c.5-3 3-4.5 6-4.5s5.5 1.5 6 4.5" />
+                      <path d="M14 18c.4-2.2 2-3.2 3-3.2s2.6.8 3 3" />
+                    </svg>
+                    <span>friends</span>
+                  </div>
+                  <div className="phone-tab">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2l-.4-2.4h-4l-.4 2.4a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.4h4l.4-2.4a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z" />
+                    </svg>
+                    <span>settings</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </section>
+
+        {/* SOCIAL PROOF STRIP */}
+        <section className="proof-strip reveal" aria-label="Who palmi is for">
+          <span className="proof-label">built for people who care about</span>
+          <span className="proof-sep" aria-hidden="true" />
+          <span className="proof-items">
+            <span>real connection</span>
+            <span className="proof-dot" aria-hidden="true">
+              ·
+            </span>
+            <span>small circles</span>
+            <span className="proof-dot" aria-hidden="true">
+              ·
+            </span>
+            <span>less noise</span>
+          </span>
         </section>
 
         {/* MANIFESTO */}
@@ -112,46 +222,53 @@ export default function LandingPage() {
             <div>
               <div className="section-label">Manifesto</div>
               <h2>
-                Everything social apps<br />added, we took out.
+                Everything social apps
+                <br />
+                added, we took out.
               </h2>
               <p className="section-lede">
-                Most apps optimize for attention. palmi optimizes for the twelve people who would actually text you
-                if something was wrong.
+                Most apps optimize for attention.
+                <br />
+                Palmi is built for the twelve people who would text you if something was wrong.
               </p>
             </div>
             <ul className="manifesto-list">
               <li>
                 <span className="ml-no">01</span>
                 <span>
-                  <span className="ml-strike">Followers.</span> Only the people you&rsquo;d invite to dinner.
+                  <span className="ml-strike">Followers.</span> Only the people you&rsquo;d invite
+                  to dinner.
                 </span>
               </li>
               <li>
                 <span className="ml-no">02</span>
                 <span>
-                  <span className="ml-strike">Algorithm.</span> Chronological. Newest on top. Always.
+                  <span className="ml-strike">Algorithm.</span> Newest first. Always.
                 </span>
               </li>
               <li>
                 <span className="ml-no">03</span>
                 <span>
-                  <span className="ml-strike">Streaks.</span> Miss a day. Miss a week. Come back anyway.
+                  <span className="ml-strike">Streaks.</span> Miss a day. Miss a week. Come back
+                  anyway.
                 </span>
               </li>
               <li>
                 <span className="ml-no">04</span>
                 <span>
-                  <span className="ml-strike">Public profiles.</span> A name. A photo. That&rsquo;s it.
+                  <span className="ml-strike">Public profiles.</span> A name. A photo. That&rsquo;s
+                  it.
                 </span>
               </li>
               <li>
                 <span className="ml-no">05</span>
                 <span>
-                  <span className="ml-strike">AI slop.</span> Nothing here was written by a machine.
+                  <span className="ml-strike">AI slop.</span> Written by people.
                 </span>
               </li>
             </ul>
           </div>
+          <div className="manifesto-closer reveal">Small circles. No noise.</div>
         </section>
 
         {/* HOW IT WORKS */}
@@ -159,7 +276,9 @@ export default function LandingPage() {
           <div className="reveal">
             <div className="section-label">How it works</div>
             <h2>
-              Three things.<br />Then we get out of the way.
+              Three things.
+              <br />
+              Then we get out of the way.
             </h2>
           </div>
 
@@ -167,10 +286,8 @@ export default function LandingPage() {
             <div className="how-card">
               <div>
                 <div className="how-num">01</div>
-                <div className="how-title">Start a circle</div>
-                <div className="how-desc">
-                  Up to fifteen friends. Invite them with a six-character code. Leave anytime.
-                </div>
+                <div className="how-title">Create or join a circle</div>
+                <div className="how-desc">5&ndash;15 people you actually care about.</div>
               </div>
               <div className="how-viz">
                 <svg width="140" height="70" viewBox="0 0 140 70" fill="none">
@@ -193,14 +310,21 @@ export default function LandingPage() {
             <div className="how-card">
               <div>
                 <div className="how-num">02</div>
-                <div className="how-title">Answer the question</div>
-                <div className="how-desc">
-                  One prompt a day, same for everyone in your circle. Photo, text, whichever feels right.
-                </div>
+                <div className="how-title">Get one question a day</div>
+                <div className="how-desc">Simple, thoughtful, consistent.</div>
               </div>
               <div className="how-viz">
                 <svg width="160" height="70" viewBox="0 0 160 70" fill="none">
-                  <rect x="0" y="20" width="160" height="32" rx="10" fill="#F4F1EB" stroke="#E8E4DE" strokeWidth="1" />
+                  <rect
+                    x="0"
+                    y="20"
+                    width="160"
+                    height="32"
+                    rx="10"
+                    fill="#F4F1EB"
+                    stroke="#E8E4DE"
+                    strokeWidth="1"
+                  />
                   <circle cx="14" cy="36" r="4" fill="#D65745" />
                   <rect x="26" y="30" width="80" height="4" rx="2" fill="#1A1A1A" opacity="0.7" />
                   <rect x="26" y="38" width="50" height="3" rx="1.5" fill="#A5A099" />
@@ -211,10 +335,8 @@ export default function LandingPage() {
             <div className="how-card">
               <div>
                 <div className="how-num">03</div>
-                <div className="how-title">Share, or don&rsquo;t</div>
-                <div className="how-desc">
-                  Post freely between questions. No numbers, no badges, no notifications unless you want them.
-                </div>
+                <div className="how-title">Stay connected naturally</div>
+                <div className="how-desc">No feeds, no pressure, no noise.</div>
               </div>
               <div className="how-viz">
                 <svg width="160" height="70" viewBox="0 0 160 70" fill="none">
@@ -230,21 +352,42 @@ export default function LandingPage() {
         {/* QUOTE */}
         <section className="quote reveal">
           <blockquote>
-            &ldquo;The internet used to feel like <em>passing notes</em>. Somewhere along the way it became a{' '}
-            <em>billboard</em>.&rdquo;
+            &ldquo;The internet used to feel like <em>passing notes</em>. Somewhere along the way it
+            became a <em>billboard</em>.&rdquo;
           </blockquote>
           <div className="quote-cite">&mdash; the reason we built this</div>
+        </section>
+
+        {/* PRICING TEASER */}
+        <section className="pricing-teaser reveal" aria-label="Pricing">
+          <p className="teaser-eyebrow">free to join</p>
+          <h2>
+            free forever.
+            <br />
+            <em>$4 a month</em> when
+            <br />
+            you want more.
+          </h2>
+          <p className="teaser-lede">
+            Palmi is free to use. Unlock full recap history, memory archive, and quiet reflection
+            when it feels useful. No ads, ever.
+          </p>
+          <a href="/pricing" className="nav-cta">
+            see pricing
+          </a>
         </section>
 
         {/* CTA */}
         <section id="waitlist" style={{ padding: 0 }}>
           <div className="cta reveal">
             <h2>
-              Your people<br />are waiting.
+              Your people
+              <br />
+              are waiting.
             </h2>
             <p>
-              palmi is rolling out to a handful of campuses this fall. Drop your email and we&rsquo;ll let you know
-              when yours opens.
+              palmi is invite-only and opening in waves. Drop your email and we&rsquo;ll reach out
+              when there&rsquo;s a spot for you.
             </p>
             <WaitlistForm source="cta" />
           </div>
@@ -258,8 +401,8 @@ export default function LandingPage() {
             <span>palmi</span>
           </a>
           <div className="footer-links">
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
             <a href="mailto:hi@palmi.app">Contact</a>
           </div>
           <div className="footer-copy">&copy; 2026 palmi</div>

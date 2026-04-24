@@ -1,18 +1,23 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View, KeyboardAvoidingView, Platform } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/TextInput';
+import { PalmiMark } from '@/components/Brand';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 import { colors, spacing, typography } from '@/theme/tokens';
 
 export default function PhoneScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const mode: 'signin' | 'signup' = params.mode === 'signin' ? 'signin' : 'signup';
   const { signInWithOtp, loading } = useAuth();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const handleContinue = async () => {
     setError(null);
@@ -27,13 +32,42 @@ export default function PhoneScreen() {
       return;
     }
 
+    // Enforce match: sign-in requires an existing account; sign-up requires
+    // a brand-new number. Done server-side (check-phone edge function) so we
+    // can't be bypassed by editing the client.
+    setChecking(true);
+    const { data, error: checkErr } = await supabase.functions.invoke('check-phone', {
+      body: { phone: e164 },
+    });
+    setChecking(false);
+
+    if (checkErr) {
+      setError("Couldn't verify that number. Try again in a moment.");
+      return;
+    }
+    const exists = !!(data as { exists?: boolean })?.exists;
+
+    if (mode === 'signin' && !exists) {
+      setError('No account with that number. Try signing up instead.');
+      return;
+    }
+    if (mode === 'signup' && exists) {
+      setError('That number is already registered. Sign in instead.');
+      return;
+    }
+
     const { error: err } = await signInWithOtp(e164);
     if (err) {
       setError(err);
       return;
     }
 
-    router.push({ pathname: '/(auth)/verify', params: { phone: e164 } });
+    router.push({ pathname: '/(auth)/verify', params: { phone: e164, mode } });
+  };
+
+  const switchMode = () => {
+    const next = mode === 'signin' ? 'signup' : 'signin';
+    router.replace({ pathname: '/(auth)/phone', params: { mode: next } });
   };
 
   return (
@@ -44,11 +78,25 @@ export default function PhoneScreen() {
       >
         <View style={styles.content}>
           <View style={styles.hero}>
+            <PalmiMark size={28} style={styles.mark} />
+            <Text style={styles.eyebrow}>
+              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+            </Text>
             <Text style={styles.title}>
-              a quiet place{'\n'}for your <Text style={styles.titleItalic}>people</Text>.
+              {mode === 'signin' ? (
+                <>
+                  sign in to <Text style={styles.titleItalic}>palmi</Text>.
+                </>
+              ) : (
+                <>
+                  a quiet place{'\n'}for your <Text style={styles.titleItalic}>people</Text>.
+                </>
+              )}
             </Text>
             <Text style={styles.lede}>
-              Enter your number to get started. We only use it so your friends can find you.
+              {mode === 'signin'
+                ? 'Enter the number you signed up with. We’ll text you a code.'
+                : 'Enter your number to get started. We only use it so your friends can find you.'}
             </Text>
           </View>
 
@@ -62,9 +110,16 @@ export default function PhoneScreen() {
               autoFocus
               error={error}
             />
-            <Button onPress={handleContinue} loading={loading}>
-              Continue
+            <Button onPress={handleContinue} loading={loading || checking}>
+              {mode === 'signin' ? 'Send code' : 'Continue'}
             </Button>
+
+            <Pressable onPress={switchMode} style={styles.switchRow} hitSlop={8}>
+              <Text style={styles.switchText}>
+                {mode === 'signin' ? 'New to palmi? ' : 'Already have an account? '}
+                <Text style={styles.switchLink}>{mode === 'signin' ? 'Sign up' : 'Sign in'}</Text>
+              </Text>
+            </Pressable>
           </View>
 
           <Text style={styles.footer}>
@@ -84,7 +139,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl,
   },
   hero: {
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  mark: {
+    marginBottom: spacing.sm,
+  },
+  eyebrow: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    letterSpacing: typography.trackWide,
+    textTransform: 'uppercase',
+    color: colors.inkFaint,
   },
   title: {
     fontFamily: typography.fontSerif,
@@ -106,6 +171,19 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: spacing.md,
+  },
+  switchRow: {
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  switchText: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.body,
+    color: colors.inkMuted,
+  },
+  switchLink: {
+    color: colors.accent,
+    fontWeight: '600',
   },
   footer: {
     fontFamily: typography.fontSans,

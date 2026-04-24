@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/TextInput';
+import { UpgradeSheet } from '@/components/UpgradeSheet';
+import { startCheckout } from '@/lib/billing';
 import { supabase } from '@/lib/supabase';
 import { colors, spacing, typography } from '@/theme/tokens';
 
@@ -13,6 +15,8 @@ export default function NewCircleScreen() {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
 
   const handleCreate = async () => {
     setError(null);
@@ -27,11 +31,28 @@ export default function NewCircleScreen() {
     setSubmitting(false);
 
     if (err) {
+      // Server raises 'circle limit reached (max N)' when the free cap is hit.
+      if (/circle limit reached/i.test(err.message)) {
+        setShowUpgrade(true);
+        return;
+      }
       setError(err.message);
       return;
     }
 
     router.replace(`/circles/${data}`);
+  };
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      await startCheckout({ kind: 'individual', tier: 'premium' });
+      setShowUpgrade(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not open checkout');
+    } finally {
+      setUpgrading(false);
+    }
   };
 
   return (
@@ -70,6 +91,14 @@ export default function NewCircleScreen() {
           <View />
         </View>
       </KeyboardAvoidingView>
+
+      <UpgradeSheet
+        visible={showUpgrade}
+        variant="circles-cap"
+        onClose={() => setShowUpgrade(false)}
+        onUpgrade={handleUpgrade}
+        loading={upgrading}
+      />
     </Screen>
   );
 }

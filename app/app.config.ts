@@ -19,8 +19,7 @@ const config: ExpoConfig = {
     infoPlist: {
       NSPhotoLibraryUsageDescription:
         'palmi needs access to your photos so you can share them with your circle.',
-      NSCameraUsageDescription:
-        'palmi uses the camera so you can post photos to your circle.',
+      NSCameraUsageDescription: 'palmi uses the camera so you can post photos to your circle.',
     },
   },
   android: {
@@ -32,13 +31,13 @@ const config: ExpoConfig = {
   },
   plugins: [
     'expo-router',
+    'expo-font',
     [
       'expo-image-picker',
       {
         photosPermission:
           'palmi needs access to your photos so you can share them with your circle.',
-        cameraPermission:
-          'palmi uses the camera so you can post photos to your circle.',
+        cameraPermission: 'palmi uses the camera so you can post photos to your circle.',
       },
     ],
   ],

@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/TextInput';
+import { PalmiMark } from '@/components/Brand';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { registerForPushAsync } from '@/lib/notifications';
 import { colors, spacing, typography } from '@/theme/tokens';
 
 export default function OnboardingScreen() {
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshProfile, signOut } = useAuth();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -34,6 +35,10 @@ export default function OnboardingScreen() {
       id: user.id,
       display_name: trimmed,
       timezone: tz,
+      // Persist phone so Palmi AI can match connection requests
+      // (e.g. "connect me with the founder of XYZ"). user.phone is
+      // the E.164 number stored by Supabase Auth at OTP verification.
+      phone: user.phone ?? null,
     });
 
     setSubmitting(false);
@@ -57,13 +62,19 @@ export default function OnboardingScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
+        <Pressable onPress={() => signOut()} hitSlop={12} style={styles.backRow}>
+          <Text style={styles.backText}>← wrong number?</Text>
+        </Pressable>
         <View style={styles.content}>
           <View style={styles.hero}>
+            <PalmiMark size={24} style={styles.mark} />
             <Text style={styles.title}>
-              What should your{'\n'}<Text style={styles.titleItalic}>friends</Text> call you?
+              What should your{'\n'}
+              <Text style={styles.titleItalic}>friends</Text> call you?
             </Text>
             <Text style={styles.lede}>
-              This is how you appear to people in your circles. No last names, no usernames. Just you.
+              This is how you appear to people in your circles. No last names, no usernames. Just
+              you.
             </Text>
             <Text style={styles.note}>
               Notifications stay off by default. You can turn them on later, per circle.
@@ -94,12 +105,22 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  backRow: {
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.xs,
+  },
+  backText: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+  },
   content: {
     flex: 1,
     justifyContent: 'space-between',
     paddingVertical: spacing.xxl,
   },
   hero: { gap: spacing.md },
+  mark: { marginBottom: spacing.xs },
   title: {
     fontFamily: typography.fontSerif,
     fontSize: typography.display + 6,

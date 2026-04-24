@@ -54,13 +54,25 @@ palmi/
 │   │   ├── 002_rls.sql           36 row-level security policies
 │   │   ├── 003_rpcs.sql          5 business-logic functions
 │   │   ├── 004_seed_questions.sql  77 human-written fallback questions
-│   │   └── 005_cron.sql          pg_cron schedules
+│   │   ├── 005_cron.sql          pg_cron schedules (curator + recap)
+│   │   ├── 006–012_*.sql         moderation, rename, push, waitlist, analytics, admins
+│   │   └── 013_llm_observability.sql  llm_calls table + llm_agent_hourly view
 │   │
 │   └── functions/
-│       └── curate-question/      Edge Function: the daily question agent
-│           ├── index.ts          Claude Haiku 4.5 + 7 quality gates
-│           ├── validator.test.ts 16 passing tests
-│           └── integration.test.ts  8 passing tests
+│       ├── _shared/
+│       │   └── llm.ts            shared Anthropic client (retry, cost, observability)
+│       ├── curate-question/      Edge Function: daily question agent
+│       │   ├── index.ts          Claude Haiku 4.5 + 7 quality gates
+│       │   ├── validator.test.ts 16 passing tests
+│       │   └── integration.test.ts  8 passing tests
+│       ├── moderate-content/     Edge Function: pre-publication safety classifier
+│       │   ├── index.ts          6-category classifier, fail-open, insert-on-pass
+│       │   ├── validator.test.ts
+│       │   └── integration.test.ts
+│       └── write-recap/          Edge Function: monthly recap writer
+│           ├── index.ts          AI prose recap + template fallback
+│           ├── validator.test.ts
+│           └── integration.test.ts
 │
 ├── apps/
 │   └── web/                      Next.js 15 — landing page (palmi.app) + /admin dashboard
@@ -86,25 +98,20 @@ palmi/
 
 2. **Enable extensions** — Dashboard → Database → Extensions: turn on `pg_cron` and `pg_net`.
 
-3. **Run the migrations** — Dashboard → SQL Editor, paste each file in order:
-   ```
-   supabase/migrations/001_schema.sql
-   supabase/migrations/002_rls.sql
-   supabase/migrations/003_rpcs.sql
-   supabase/migrations/004_seed_questions.sql
-   supabase/migrations/005_cron.sql
-   ```
-   After `005`, follow the comments at the bottom: set `app.edge_base_url` and `app.service_role_key`, then uncomment the `cron.schedule(...)` call.
+3. **Run the migrations** — Dashboard → SQL Editor, paste each file in order (`001` through `013`). After `005`, follow the comments at the bottom: set `app.edge_base_url` and `app.service_role_key`, then uncomment the `cron.schedule(...)` calls.
 
 4. **Create the storage bucket** — Dashboard → Storage → New bucket: name `post-photos`, public, 10 MB limit.
 
-5. **Deploy the Edge Function**:
+5. **Deploy the Edge Functions**:
+
    ```bash
    cd supabase
    supabase login
    supabase link --project-ref <your-ref>
    supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
    supabase functions deploy curate-question --no-verify-jwt
+   supabase functions deploy moderate-content --no-verify-jwt
+   supabase functions deploy write-recap --no-verify-jwt
    ```
 
 6. **Run the app**:
@@ -125,7 +132,7 @@ These aren't style suggestions; they're how we make product decisions.
 
 ### 1. Silence is the feature
 
-Every time you consider adding something, ask: *does this make the app louder?* If yes, the default answer is no. No badges. No unread counts. No "suggested for you." No streaks. No rankings.
+Every time you consider adding something, ask: _does this make the app louder?_ If yes, the default answer is no. No badges. No unread counts. No "suggested for you." No streaks. No rankings.
 
 ### 2. Chronological, always
 
@@ -141,11 +148,11 @@ Memberships are the only relationship in the database. There is no "follow" tabl
 
 ### 5. AI you feel, never see
 
-- Agent 1 (built): **Question Curator** — writes the daily question
-- Agent 2 (todo): **Recap Writer** — monthly summary of the circle's rhythm
-- Agent 3 (todo): **Moderator** — pre-publication content safety
+- Agent 1 ✓: **Question Curator** — writes the daily question
+- Agent 2 ✓: **Recap Writer** — monthly summary of the circle's rhythm
+- Agent 3 ✓: **Moderator** — pre-publication content safety
 
-No AI-generated posts. No AI companions. No AI-suggested replies. Ever.
+All three agents share a single `_shared/llm.ts` client with retry, timeout, cost accounting, and per-call observability to `public.llm_calls`. No AI-generated posts. No AI companions. No AI-suggested replies. Ever.
 
 ---
 
@@ -177,9 +184,42 @@ No AI-generated posts. No AI companions. No AI-suggested replies. Ever.
 - Timezone-aware: each circle's question drops at 9am in the owner's local TZ
 - 24/24 tests passing (16 validator + 8 integration)
 
+### Content Moderator ✓
+
+- Pre-publication safety classifier — called by the client before any post or answer is inserted
+- Six categories: `nsfw`, `self_harm`, `targeted_harassment`, `csam`, `real_names_of_non_members`, `illegal_content`
+- Verdicts: `pass` (insert with `moderation_status = 'ok'`), `hold` (insert with `moderation_status = 'held'`, author-only), `reject` (no insert)
+- `csam` always rejects; all other flags hold; clean content passes
+- Fail-open on any infra failure — content goes through, outage is logged
+- Every run logged to `moderation_events` audit table
+- Client-side session refresh before call eliminates 401 errors on returning users
+
+### Recap Writer ✓
+
+- Monthly AI prose recap of the prior month's circle activity
+- Runs on the 1st of each month at 9am in the circle owner's timezone
+- AI path: Claude Haiku 4.5 with warm, lowercase-friendly brand voice
+- 7 quality gates: length (120–180 words / 500–1500 chars), forbidden phrases, no metrics, member name mention required
+- Template fallback when AI fails — always produces a valid recap
+- Per-circle idempotency: skips circles that already have a recap for the period
+
+### Shared LLM Client ✓
+
+- `supabase/functions/_shared/llm.ts` used by all three agents
+- Exponential backoff retry on 429 / 5xx / network errors (configurable attempts + timeout)
+- Per-call cost accounting: Claude Haiku 4.5 at $1/MTok input, $5/MTok output
+- Every call logged to `public.llm_calls` with agent, model, status, duration, tokens, cost, circle_id
+- `llm_agent_hourly` view for aggregate monitoring
+
 ### Cost model
 
-At 10,000 active circles, one question per day: ~$12/month. Trivial.
+At 10,000 active circles:
+
+- Question curator (1 call/circle/day): ~$12/month
+- Recap writer (1 call/circle/month): ~$0.50/month
+- Moderator (per post — usage-dependent): ~$0.10 per 1,000 posts
+
+Total at 10k circles + moderate usage: well under $20/month.
 
 ---
 
@@ -234,16 +274,16 @@ palmi runs **no third-party analytics**. No GA, no Mixpanel, no Segment, no Post
 
 **What we look at:**
 
-| Metric | Why |
-|---|---|
-| DAU / WAU (30d / 12w) | Is the app being opened in any meaningful way? |
-| Retention cohorts by signup week | Do people stick, or drop off after week 2? |
+| Metric                                   | Why                                                  |
+| ---------------------------------------- | ---------------------------------------------------- |
+| DAU / WAU (30d / 12w)                    | Is the app being opened in any meaningful way?       |
+| Retention cohorts by signup week         | Do people stick, or drop off after week 2?           |
 | Overall median posts per circle per week | Are circles actually posting, or is it a ghost town? |
-| % of daily questions with ≥1 answer | Is the core ritual working? |
-| Time to first post after circle creation | Is the onboarding → first-value gap too long? |
-| Reaction usage by kind | Which of the four emoji are pulling weight? |
-| Top fallback questions | What to clone when growing the bank |
-| Waitlist signup count | Pre-launch demand |
+| % of daily questions with ≥1 answer      | Is the core ritual working?                          |
+| Time to first post after circle creation | Is the onboarding → first-value gap too long?        |
+| Reaction usage by kind                   | Which of the four emoji are pulling weight?          |
+| Top fallback questions                   | What to clone when growing the bank                  |
+| Waitlist signup count                    | Pre-launch demand                                    |
 
 **What we explicitly don't log:**
 
@@ -263,11 +303,11 @@ If anything here starts to feel like surveillance in practice, yank it. The inst
 
 **Priority order if you're picking up from here:**
 
-1. Register cron schedules (curator + recap) in Supabase dashboard
-2. Live moderator smoke test against Anthropic API
-3. Buy palmi.app domain and deploy `apps/web` to Vercel
-4. Materialized-view-backed waitlist counter (replace hardcoded 2,847)
-5. Stretch: Supabase-session auth for `/admin` once we have >1 admin
+1. Buy palmi.app domain and deploy `apps/web` to Vercel
+2. Materialized-view-backed waitlist counter (replace hardcoded 2,847)
+3. Push notification delivery (tokens + `009_push_triggers.sql` are in place; need APNs/FCM credentials set in Supabase secrets)
+4. Stretch: Supabase-session auth for `/admin` once we have >1 admin
+5. Stretch: reply threading on posts (schema has `reply_to_id`; UI not built)
 
 ---
 
@@ -277,10 +317,10 @@ If anything here starts to feel like surveillance in practice, yank it. The inst
 # TypeScript check on the app
 npm run app:typecheck
 
-# Unit + integration tests for the curator (no external deps)
+# Unit + integration tests for all three agents (no external deps)
 npm run functions:test
 
-# Live test against the real Anthropic API (~$0.05)
+# Live smoke tests against the real Anthropic API (~$0.05 each)
 ANTHROPIC_API_KEY=sk-ant-... npm run functions:smoke
 ```
 
@@ -298,4 +338,4 @@ MIT. See `LICENSE`.
 
 ---
 
-*Built quietly.*
+_Built quietly._

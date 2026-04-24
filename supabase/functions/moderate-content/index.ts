@@ -37,24 +37,24 @@
 // ============================================================================
 
 // deno-lint-ignore-file no-explicit-any
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { callLlm } from '../_shared/llm.ts';
 
-const MODEL = "claude-haiku-4-5-20251001";
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = 'claude-haiku-4-5-20251001';
 
 // Categories the classifier may emit --------------------------------------------
 export const CATEGORIES = [
-  "nsfw",
-  "self_harm",
-  "targeted_harassment",
-  "csam",
-  "real_names_of_non_members",
-  "illegal_content",
+  'nsfw',
+  'self_harm',
+  'targeted_harassment',
+  'csam',
+  'real_names_of_non_members',
+  'illegal_content',
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-export type Verdict = "pass" | "hold" | "reject";
+export type Verdict = 'pass' | 'hold' | 'reject';
 
 export interface ClassifierOutput {
   categories: Category[];
@@ -64,10 +64,12 @@ export interface ClassifierOutput {
 
 export interface ModerateRequest {
   circle_id: string;
-  content_type: "post" | "answer";
+  content_type: 'post' | 'answer';
   body?: string | null;
   photo_url?: string | null;
+  video_url?: string | null;
   question_id?: string | null;
+  reply_to_id?: string | null;
 }
 
 export interface ModerateResponse {
@@ -113,8 +115,11 @@ export function parseClassifierOutput(raw: string): ClassifierOutput | null {
   if (!raw) return null;
   // Strip markdown fences the model sometimes adds.
   let s = raw.trim();
-  if (s.startsWith("```")) {
-    s = s.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
+  if (s.startsWith('```')) {
+    s = s
+      .replace(/^```[a-zA-Z]*\s*/, '')
+      .replace(/```\s*$/, '')
+      .trim();
   }
   let parsed: any;
   try {
@@ -122,31 +127,31 @@ export function parseClassifierOutput(raw: string): ClassifierOutput | null {
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
 
   const cats = Array.isArray(parsed.categories) ? parsed.categories : [];
   const filtered: Category[] = [];
   for (const c of cats) {
-    if (typeof c === "string" && (CATEGORIES as readonly string[]).includes(c)) {
+    if (typeof c === 'string' && (CATEGORIES as readonly string[]).includes(c)) {
       if (!filtered.includes(c as Category)) filtered.push(c as Category);
     }
   }
 
-  let conf = typeof parsed.confidence === "number" ? parsed.confidence : 0.5;
+  let conf = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5;
   if (!Number.isFinite(conf)) conf = 0.5;
   if (conf < 0) conf = 0;
   if (conf > 1) conf = 1;
 
-  const reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 240) : "";
+  const reason = typeof parsed.reason === 'string' ? parsed.reason.slice(0, 240) : '';
 
   return { categories: filtered, confidence: conf, reason };
 }
 
 export function verdictFor(output: ClassifierOutput): Verdict {
   // csam is always a reject regardless of other signals.
-  if (output.categories.includes("csam")) return "reject";
-  if (output.categories.length === 0) return "pass";
-  return "hold";
+  if (output.categories.includes('csam')) return 'reject';
+  if (output.categories.length === 0) return 'pass';
+  return 'hold';
 }
 
 // User-facing rejection reason. Deliberately vague to avoid gaming.
@@ -159,56 +164,48 @@ export function rejectionMessage(output: ClassifierOutput): string {
 // ============================================================================
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
 }
 
 // ============================================================================
-// Anthropic call
+// Classifier call via shared LLM client. Retries + observability handled there.
 // ============================================================================
 
 async function classify(
-  apiKey: string,
   memberNames: string[],
   req: ModerateRequest,
+  circleId: string
 ): Promise<ClassifierOutput | null> {
   const userContent = [
-    `Circle member first names: ${memberNames.length ? memberNames.join(", ") : "(none provided)"}`,
+    `Circle member first names: ${memberNames.length ? memberNames.join(', ') : '(none provided)'}`,
     `Content type: ${req.content_type}`,
-    `Has photo: ${req.photo_url ? "yes" : "no"}`,
+    `Has photo: ${req.photo_url ? 'yes' : 'no'}`,
     `Body:`,
-    (req.body ?? "").trim() || "(no text; photo only)",
-  ].join("\n");
+    (req.body ?? '').trim() || '(no text; photo only)',
+  ].join('\n');
 
-  const res = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 300,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userContent }],
-    }),
+  const resp = await callLlm({
+    agent: 'moderate-content',
+    model: MODEL,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userContent }],
+    maxTokens: 300,
+    // Moderation must be fast; the user is waiting on this.
+    timeoutMs: 8000,
+    maxAttempts: 2,
+    circleId,
   });
-
-  if (!res.ok) return null;
-  const data = await res.json().catch(() => null);
-  const text = data?.content?.[0]?.text;
-  if (typeof text !== "string") return null;
-  return parseClassifierOutput(text);
+  if (!resp.text) return null;
+  return parseClassifierOutput(resp.text);
 }
 
 // ============================================================================
@@ -216,38 +213,37 @@ async function classify(
 // ============================================================================
 
 async function handler(req: Request): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
-  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+  const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
 
   if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) {
-    return json({ error: "server_misconfigured" }, 500);
+    return json({ error: 'server_misconfigured' }, 500);
   }
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader.startsWith("Bearer ")) {
-    return json({ error: "unauthenticated" }, 401);
+  const authHeader = req.headers.get('Authorization') ?? '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return json({ error: 'unauthenticated' }, 401);
   }
 
   let body: ModerateRequest;
   try {
     body = await req.json();
   } catch {
-    return json({ error: "bad_json" }, 400);
+    return json({ error: 'bad_json' }, 400);
   }
 
-  if (!body?.circle_id || (body.content_type !== "post" && body.content_type !== "answer")) {
-    return json({ error: "bad_request" }, 400);
+  if (!body?.circle_id || (body.content_type !== 'post' && body.content_type !== 'answer')) {
+    return json({ error: 'bad_request' }, 400);
   }
-  if (!body.body && !body.photo_url) {
-    return json({ error: "empty_content" }, 400);
+  if (!body.body && !body.photo_url && !body.video_url) {
+    return json({ error: 'empty_content' }, 400);
   }
-  if (body.content_type === "answer" && !body.question_id) {
-    return json({ error: "missing_question" }, 400);
+  if (body.content_type === 'answer' && !body.question_id) {
+    return json({ error: 'missing_question' }, 400);
   }
 
   // Client (user-scoped) — for identity + RLS checks + the final insert.
@@ -258,55 +254,51 @@ async function handler(req: Request): Promise<Response> {
   const service = createClient(SUPABASE_URL, SERVICE_KEY);
 
   const { data: userRes, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userRes?.user) return json({ error: "unauthenticated" }, 401);
+  if (userErr || !userRes?.user) return json({ error: 'unauthenticated' }, 401);
   const userId = userRes.user.id;
 
   // Membership check — the user must be in the circle they're posting to.
   const { data: mem } = await service
-    .from("memberships")
-    .select("id")
-    .eq("circle_id", body.circle_id)
-    .eq("user_id", userId)
-    .is("left_at", null)
+    .from('memberships')
+    .select('id')
+    .eq('circle_id', body.circle_id)
+    .eq('user_id', userId)
+    .is('left_at', null)
     .maybeSingle();
-  if (!mem) return json({ error: "forbidden" }, 403);
+  if (!mem) return json({ error: 'forbidden' }, 403);
 
   // Fetch member first names for classifier context — only this circle, by rule.
   const { data: memberRows } = await service
-    .from("memberships")
-    .select("profiles:user_id(display_name)")
-    .eq("circle_id", body.circle_id)
-    .is("left_at", null);
+    .from('memberships')
+    .select('profiles:user_id(display_name)')
+    .eq('circle_id', body.circle_id)
+    .is('left_at', null);
   const memberNames: string[] = (memberRows ?? [])
-    .map((r: any) => (r.profiles?.display_name ?? "").split(" ")[0])
+    .map((r: any) => (r.profiles?.display_name ?? '').split(' ')[0])
     .filter((n: string) => n.length > 0);
 
-  // Classify. Fail OPEN on any infra failure.
+  // Classify. Fail OPEN on any infra failure — shared client already retried.
   let output: ClassifierOutput | null = null;
   let infraError: string | null = null;
-  if (!ANTHROPIC_API_KEY) {
-    infraError = "no_api_key";
-  } else {
-    try {
-      output = await classify(ANTHROPIC_API_KEY, memberNames, body);
-      if (!output) infraError = "classifier_parse_failed";
-    } catch (e) {
-      infraError = `classifier_error:${(e as Error).message}`;
-    }
+  try {
+    output = await classify(memberNames, body, body.circle_id);
+    if (!output) infraError = 'classifier_unavailable';
+  } catch (e) {
+    infraError = `classifier_error:${(e as Error).message}`;
   }
 
   let verdict: Verdict;
   let categories: Category[] = [];
-  let reason = "";
+  let reason = '';
   let score: number | null = null;
   let modelLabel = MODEL;
 
   if (infraError || !output) {
     // Fail open — the content goes through but we log the outage.
-    verdict = "pass";
+    verdict = 'pass';
     categories = [];
-    reason = "";
-    modelLabel = "fail_open";
+    reason = '';
+    modelLabel = 'fail_open';
   } else {
     verdict = verdictFor(output);
     categories = output.categories;
@@ -316,25 +308,27 @@ async function handler(req: Request): Promise<Response> {
 
   // Insert the content (only on pass/hold).
   let contentId: string | undefined;
-  if (verdict === "pass" || verdict === "hold") {
-    const modStatus = verdict === "pass" ? "ok" : "held";
-    if (body.content_type === "post") {
+  if (verdict === 'pass' || verdict === 'hold') {
+    const modStatus = verdict === 'pass' ? 'ok' : 'held';
+    if (body.content_type === 'post') {
       const { data, error } = await userClient
-        .from("posts")
+        .from('posts')
         .insert({
           circle_id: body.circle_id,
           author_id: userId,
+          video_url: body.video_url ?? null,
+          reply_to_id: body.reply_to_id ?? null,
           body: body.body?.trim() || null,
           photo_url: body.photo_url ?? null,
           moderation_status: modStatus,
         })
-        .select("id")
+        .select('id')
         .single();
-      if (error) return json({ error: "insert_failed", detail: error.message }, 500);
+      if (error) return json({ error: 'insert_failed', detail: error.message }, 500);
       contentId = data.id;
     } else {
       const { data, error } = await userClient
-        .from("question_answers")
+        .from('question_answers')
         .insert({
           question_id: body.question_id!,
           circle_id: body.circle_id,
@@ -343,16 +337,16 @@ async function handler(req: Request): Promise<Response> {
           photo_url: body.photo_url ?? null,
           moderation_status: modStatus,
         })
-        .select("id")
+        .select('id')
         .single();
-      if (error) return json({ error: "insert_failed", detail: error.message }, 500);
+      if (error) return json({ error: 'insert_failed', detail: error.message }, 500);
       contentId = data.id;
     }
   }
 
   // Audit every run.
-  await service.from("moderation_events").insert({
-    content_type: body.content_type === "post" ? "post" : "answer",
+  await service.from('moderation_events').insert({
+    content_type: body.content_type === 'post' ? 'post' : 'answer',
     content_id: contentId ?? null,
     verdict,
     categories,
@@ -365,7 +359,7 @@ async function handler(req: Request): Promise<Response> {
     verdict,
     categories,
     ...(contentId ? { content_id: contentId } : {}),
-    ...(verdict === "reject" ? { reason: rejectionMessage(output!) } : {}),
+    ...(verdict === 'reject' ? { reason: rejectionMessage(output!) } : {}),
   };
   return json(resp);
 }

@@ -5,16 +5,24 @@ import { Platform } from 'react-native';
 
 import { supabase } from './supabase';
 
+// True when running inside the pre-built Expo Go app. Remote push was removed
+// from Expo Go in SDK 53; calling the notifications API in that environment
+// just produces warning spam. We silently skip until the user runs a dev build.
+const IS_EXPO_GO = Constants.appOwnership === 'expo';
+
 // Calm defaults: show silently in foreground too, no sound.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Skipped in Expo Go to avoid the SDK-53 warning on every launch.
+if (!IS_EXPO_GO) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: false,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export interface RegisterResult {
   token: string | null;
@@ -26,6 +34,7 @@ export interface RegisterResult {
 // into public.push_tokens. On denial or simulator, returns without persisting.
 // Safe to call multiple times — idempotent by (user_id, token).
 export async function registerForPushAsync(userId: string): Promise<RegisterResult> {
+  if (IS_EXPO_GO) return { token: null, status: 'expo_go' };
   if (!Device.isDevice) return { token: null, status: 'unsupported' };
 
   const existing = await Notifications.getPermissionsAsync();
@@ -48,24 +57,19 @@ export async function registerForPushAsync(userId: string): Promise<RegisterResu
   }
 
   const projectId =
-    Constants.expoConfig?.extra?.eas?.projectId ??
-    (Constants.easConfig as any)?.projectId;
-  const tokenRes = await Notifications.getExpoPushTokenAsync(
-    projectId ? { projectId } : undefined,
-  );
+    Constants.expoConfig?.extra?.eas?.projectId ?? (Constants.easConfig as any)?.projectId;
+  const tokenRes = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
   const token = tokenRes.data;
 
-  await supabase
-    .from('push_tokens')
-    .upsert(
-      {
-        user_id: userId,
-        token,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        enabled: true,
-      },
-      { onConflict: 'user_id,token' },
-    );
+  await supabase.from('push_tokens').upsert(
+    {
+      user_id: userId,
+      token,
+      platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      enabled: true,
+    },
+    { onConflict: 'user_id,token' }
+  );
 
   return { token, status: 'granted' };
 }

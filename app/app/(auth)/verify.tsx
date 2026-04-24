@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { TextInput } from '@/components/TextInput';
+import { PalmiMark } from '@/components/Brand';
 import { useAuth } from '@/hooks/useAuth';
 import { colors, spacing, typography } from '@/theme/tokens';
 
@@ -34,10 +35,9 @@ export default function VerifyScreen() {
       >
         <View style={styles.content}>
           <View style={styles.hero}>
+            <PalmiMark size={28} style={styles.mark} />
             <Text style={styles.title}>Check your texts.</Text>
-            <Text style={styles.lede}>
-              We sent a 6-digit code to {phone}.
-            </Text>
+            <Text style={styles.lede}>We sent a 6-digit code to {phone}.</Text>
           </View>
 
           <View style={styles.form}>
@@ -76,6 +76,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl,
   },
   hero: { gap: spacing.md },
+  mark: { marginBottom: spacing.xs },
   title: {
     fontFamily: typography.fontSerif,
     fontSize: typography.display,

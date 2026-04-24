@@ -184,6 +184,7 @@ export default function AnswerScreen() {
         </View>
 
         <ScrollView
+          showsVerticalScrollIndicator={false}
           style={styles.flex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
@@ -221,20 +222,14 @@ export default function AnswerScreen() {
 
               <View style={styles.composerFooter}>
                 <Pressable onPress={pickPhoto} hitSlop={8}>
-                  <Text style={styles.photoButton}>
-                    {photo ? 'Replace photo' : 'Add a photo'}
-                  </Text>
+                  <Text style={styles.photoButton}>{photo ? 'Replace photo' : 'Add a photo'}</Text>
                 </Pressable>
                 <Text style={[styles.counter, remaining < 40 && styles.counterWarn]}>
                   {remaining}
                 </Text>
               </View>
 
-              <Button
-                onPress={handleSubmit}
-                loading={submitting}
-                disabled={!body.trim() && !photo}
-              >
+              <Button onPress={handleSubmit} loading={submitting} disabled={!body.trim() && !photo}>
                 Share with your circle
               </Button>
             </View>
@@ -252,7 +247,9 @@ export default function AnswerScreen() {
           {answers.length > 0 && (
             <View style={styles.answersBlock}>
               <Text style={styles.sectionLabel}>
-                {hasAnswered ? `${answers.length} others answered` : `${answers.length} already answered`}
+                {hasAnswered
+                  ? `${answers.length} others answered`
+                  : `${answers.length} already answered`}
               </Text>
               <View style={styles.answersList}>
                 {answers.map((ans) => (
