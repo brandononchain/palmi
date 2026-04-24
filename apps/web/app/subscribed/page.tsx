@@ -4,6 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Welcome to palmi premium',
   description: 'Subscription confirmed. Open palmi to continue.',
+  robots: { index: false, follow: false },
 };
 
 // Deep-link helper. When opened from the mobile app's external browser, this
