@@ -30,6 +30,13 @@ export interface RegisterResult {
   status: string;
 }
 
+export async function getPushPermissionStatusAsync(): Promise<string> {
+  if (IS_EXPO_GO) return 'expo_go';
+  if (!Device.isDevice) return 'unsupported';
+  const existing = await Notifications.getPermissionsAsync();
+  return existing.status;
+}
+
 // Requests OS push permission, fetches the Expo push token, and upserts it
 // into public.push_tokens. On denial or simulator, returns without persisting.
 // Safe to call multiple times — idempotent by (user_id, token).

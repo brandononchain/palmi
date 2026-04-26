@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,13 +6,11 @@ import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { useAuth, tierFromProfile } from '@/hooks/useAuth';
 import { tierLabel } from '@/lib/billing';
-import { registerForPushAsync, sendTestPush } from '@/lib/notifications';
 import { colors, spacing, typography } from '@/theme/tokens';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
-  const [testing, setTesting] = useState(false);
 
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-US', {
@@ -32,25 +29,6 @@ export default function SettingsScreen() {
         year: 'numeric',
       })
     : null;
-
-  const handleTestPush = async () => {
-    if (!user) return;
-    setTesting(true);
-    const reg = await registerForPushAsync(user.id).catch(() => null);
-    if (!reg || reg.status !== 'granted' || !reg.token) {
-      setTesting(false);
-      Alert.alert(
-        'Notifications are off',
-        'Enable notifications for palmi in your device settings to receive a test.'
-      );
-      return;
-    }
-    const ok = await sendTestPush(user.id);
-    setTesting(false);
-    if (!ok) {
-      Alert.alert('Could not send', 'The test push did not reach Expo. Try again.');
-    }
-  };
 
   const confirmSignOut = () => {
     Alert.alert('Sign out?', 'You will need to verify your phone number again to sign back in.', [
@@ -125,22 +103,59 @@ export default function SettingsScreen() {
           </View>
         </Pressable>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>PREMIUM</Text>
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            onPress={() => router.push('/memory' as any)}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>memory search</Text>
+              <Text style={styles.rowSubtitle}>find your own posts and answers across circles</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.inkFaint} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            onPress={() => router.push('/reflection' as any)}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>monthly reflection</Text>
+              <Text style={styles.rowSubtitle}>your private paragraph for the month</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.inkFaint} />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            onPress={() => router.push('/yearbook' as any)}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowTitle}>yearbook export</Text>
+              <Text style={styles.rowSubtitle}>turn the year into a PDF you can keep</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.inkFaint} />
+          </Pressable>
+        </View>
+
         {/* Notifications */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            onPress={handleTestPush}
-            disabled={testing}
+            onPress={() => router.push('/notifications' as any)}
           >
             <View style={styles.rowMain}>
-              <Text style={styles.rowTitle}>Send test notification</Text>
-              <Text style={styles.rowSubtitle}>
-                {testing ? 'sending…' : 'check push notifications are working'}
-              </Text>
+              <Text style={styles.rowTitle}>notification preferences</Text>
+              <Text style={styles.rowSubtitle}>device status and per-circle moments</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.inkFaint} />
           </Pressable>
+          <View style={styles.noteCard}>
+            <Text style={styles.noteTitle}>what palmi pings you for</Text>
+            <Text style={styles.noteBody}>
+              daily question drops, join approvals, and circle activity you opted into.
+            </Text>
+          </View>
         </View>
 
         {/* About */}
@@ -302,6 +317,24 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.inkMuted,
     letterSpacing: 0.5,
+  },
+  noteCard: {
+    borderRadius: 12,
+    backgroundColor: colors.bgPanel,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: 4,
+  },
+  noteTitle: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.caption,
+    color: colors.ink,
+  },
+  noteBody: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+    lineHeight: typography.caption * typography.lineRelaxed,
   },
 
   signOutWrap: {

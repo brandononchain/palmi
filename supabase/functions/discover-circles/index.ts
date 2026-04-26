@@ -73,6 +73,7 @@ export interface DiscoverResponse {
   results: DiscoverResult[];
   parsed_intent: ParsedIntent | null;
   query_id: string | null;
+  quota?: { remaining: number; used: number; quota: number; tier: string } | null;
 }
 
 export interface ParsedIntent {
@@ -260,6 +261,25 @@ async function handler(req: Request): Promise<Response> {
 
   const service = createClient(SUPABASE_URL, SERVICE_KEY);
 
+  const { data: quotaRows } = await service.rpc('check_discovery_quota', {
+    p_user: userId,
+  });
+  const currentQuota =
+    (quotaRows?.[0] as
+      | { remaining: number; used: number; quota: number; tier: string }
+      | undefined) ?? null;
+
+  if (currentQuota && currentQuota.quota >= 0 && currentQuota.remaining <= 0) {
+    return json({ error: 'discovery_quota_reached', quota: currentQuota }, 429);
+  }
+
+  await service.rpc('consume_discovery_quota', { p_user: userId });
+  const { data: nextQuotaRows } = await service.rpc('check_discovery_quota', { p_user: userId });
+  const nextQuota =
+    (nextQuotaRows?.[0] as
+      | { remaining: number; used: number; quota: number; tier: string }
+      | undefined) ?? currentQuota;
+
   // ---- Step 1: parse intent --------------------------------------------------
   let parsed: ParsedIntent | null = null;
   const parserResp = await callLlm({
@@ -349,6 +369,7 @@ async function handler(req: Request): Promise<Response> {
       results: [],
       parsed_intent: parsed,
       query_id: logRow?.id ?? null,
+      quota: nextQuota,
     } as DiscoverResponse);
   }
 
@@ -468,6 +489,7 @@ async function handler(req: Request): Promise<Response> {
     results,
     parsed_intent: parsed,
     query_id: logRow?.id ?? null,
+    quota: nextQuota,
   } as DiscoverResponse);
 }
 

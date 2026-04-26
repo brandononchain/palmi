@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { joinWaitlist } from '../actions';
+import { trackLandingEvent } from './FunnelTracking';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -13,6 +14,7 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
   );
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [started, setStarted] = useState(false);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +31,7 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
       fd.set('company', '');
       const res = await joinWaitlist(fd);
       if (res.ok) {
+        void trackLandingEvent('waitlist_submitted', source);
         setSuccessMessage(
           res.message ??
             "Thanks. You're on the list — we'll be in touch when there's a spot for you."
@@ -74,6 +77,11 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
             aria-label="Email address"
             autoComplete="email"
             disabled={pending}
+            onFocus={() => {
+              if (started) return;
+              setStarted(true);
+              void trackLandingEvent('waitlist_form_started', source);
+            }}
             required
           />
           <button type="submit" className="btn" disabled={pending}>

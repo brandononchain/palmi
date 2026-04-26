@@ -1,15 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { InstitutionalInquiryForm } from '../components/InstitutionalInquiryForm';
+import { PricingViewTracker, TrackedFunnelLink } from '../components/FunnelTracking';
+
 export const metadata: Metadata = {
   title: 'Pricing — palmi',
   description:
-    'Four tiers. No ads, no pay-to-reach, no gamification. Just the quiet place for your people.',
+    'Free to join. Premium remembers more. Premium+ opens the AI network. Paid circles give hosts a real studio.',
 };
 
 export default function PricingPage() {
   return (
     <>
+      <PricingViewTracker />
       <nav id="nav">
         <div className="inner">
           <Link href="/" className="logo">
@@ -20,9 +24,9 @@ export default function PricingPage() {
             <Link href="/#how">How it works</Link>
             <Link href="/#manifesto">Manifesto</Link>
             <Link href="/pricing">Pricing</Link>
-            <Link href="/#waitlist" className="nav-cta">
+            <TrackedFunnelLink href="/#waitlist" className="nav-cta" source="pricing-nav">
               Request access
-            </Link>
+            </TrackedFunnelLink>
           </div>
         </div>
       </nav>
@@ -34,14 +38,15 @@ export default function PricingPage() {
             pricing &middot; honest &middot; no surprises
           </span>
           <h1>
-            four tiers.
+            free to start.
             <br />
-            <em>no noise.</em>
+            <em>pay for depth.</em>
           </h1>
           <p className="lede">
-            palmi stays free to join. a few quiet things unlock when you&rsquo;re ready.
+            palmi stays free to join.
             <br />
-            no ads. no pay-to-reach. no streaks. no games.
+            premium remembers more. premium+ opens the AI network. paid circles give hosts a real
+            studio.
           </p>
         </header>
 
@@ -55,8 +60,9 @@ export default function PricingPage() {
             </header>
             <ul>
               <li>up to 2 circles</li>
-              <li>one question a day</li>
+              <li>one question a day, front and center</li>
               <li>photos, replies, reactions</li>
+              <li>no public feed</li>
               <li>this month&rsquo;s recap</li>
             </ul>
             <p className="tier-foot">fully usable, forever.</p>
@@ -71,7 +77,7 @@ export default function PricingPage() {
             </header>
             <ul>
               <li>up to 10 circles</li>
-              <li>monthly recaps, saved forever</li>
+              <li>full recap archive</li>
               <li>search your memory across circles</li>
               <li>yearbook export (pdf)</li>
               <li>a quiet monthly reflection</li>
@@ -88,10 +94,10 @@ export default function PricingPage() {
             </header>
             <ul>
               <li>everything in premium</li>
-              <li>circle discovery</li>
+              <li>AI network discovery</li>
               <li>unlimited circle matching</li>
-              <li>ai &ldquo;why this fits&rdquo;</li>
-              <li>priority access to new circles</li>
+              <li>&ldquo;why this fits&rdquo; on every match</li>
+              <li>priority discovery access</li>
             </ul>
             <p className="tier-foot">for the connectors.</p>
           </article>
@@ -109,8 +115,9 @@ export default function PricingPage() {
               <li>co-host roles (up to 2)</li>
               <li>participation insights</li>
               <li>pinned memories</li>
-              <li>custom onboarding</li>
+              <li>custom onboarding note</li>
               <li>circle themes</li>
+              <li>discovery priority controls</li>
             </ul>
             <p className="tier-foot">for groups with a purpose.</p>
           </article>
@@ -120,11 +127,9 @@ export default function PricingPage() {
           <h3>for universities, accelerators, cohorts</h3>
           <p>
             palmi can be tailored for high-trust communities with private circles, guided
-            onboarding, and structured recaps designed around your program.
+            onboarding, AI-matched discovery, and structured recaps designed around your program.
           </p>
-          <Link href="/#waitlist" className="nav-cta">
-            start a conversation
-          </Link>
+          <InstitutionalInquiryForm />
         </section>
 
         <section className="pricing-faq">
@@ -132,7 +137,8 @@ export default function PricingPage() {
           <dl>
             <dt>do i have to upgrade?</dt>
             <dd>
-              no. the free tier is the product. premium is for people who want to remember more.
+              no. the free tier is the product. upgrades are for people who want more memory, more
+              discovery, or more control.
             </dd>
 
             <dt>can i cancel?</dt>
@@ -146,16 +152,20 @@ export default function PricingPage() {
 
             <dt>what happens to my circles if i downgrade?</dt>
             <dd>
-              your circles and posts stay. circles above the free cap go read-only until you rejoin.
+              your circles and posts stay. anything above your plan limits goes quiet until you
+              re-upgrade.
             </dd>
           </dl>
         </section>
 
         <section className="pricing-cta">
-          <p>palmi opens in waves. join the waitlist and we&rsquo;ll let you in soon.</p>
-          <Link href="/#waitlist" className="nav-cta">
+          <p>
+            palmi opens in waves. join the waitlist and we&rsquo;ll let you in when there&apos;s
+            room.
+          </p>
+          <TrackedFunnelLink href="/#waitlist" className="nav-cta" source="pricing-footer">
             request access
-          </Link>
+          </TrackedFunnelLink>
         </section>
       </main>
     </>

@@ -76,6 +76,13 @@ export interface Circle {
   member_count: number;
   created_at: IsoDate;
   deleted_at: IsoDate | null;
+  tier?: 'free' | 'paid';
+  paid_since?: IsoDate | null;
+  theme_key?: 'paper' | 'evening' | 'forest' | 'garden';
+  onboarding_note?: string | null;
+  pinned_post_id?: Uuid | null;
+  discovery_priority?: number;
+  recap_cadence?: 'monthly' | 'weekly';
   /** Phase 1.7: when true, owners have manually set the purpose; classifier
    * will refresh subtopics + summary but never overwrite purpose. */
   purpose_locked: boolean;
@@ -125,7 +132,7 @@ export interface Membership {
   id: Uuid;
   circle_id: Uuid;
   user_id: Uuid;
-  role: 'member' | 'owner';
+  role: 'member' | 'co_host' | 'owner';
   joined_at: IsoDate;
   left_at: IsoDate | null;
 }
@@ -253,6 +260,52 @@ export interface DiscoverResponse {
   results: DiscoveredCircle[];
   parsed_intent: ParsedIntent | null;
   query_id: Uuid | null;
+  quota?: DiscoveryQuota | null;
+}
+
+export interface DiscoveryQuota {
+  remaining: number;
+  used: number;
+  quota: number;
+  tier: 'free' | 'premium' | 'premium_plus';
+}
+
+export interface PersonalReflection {
+  id: Uuid;
+  user_id: Uuid;
+  period_start: IsoDate;
+  period_end: IsoDate;
+  body: string;
+  source: 'ai' | 'template';
+  created_at: IsoDate;
+}
+
+export interface MemorySearchResult {
+  source_type: 'post' | 'answer';
+  source_id: Uuid;
+  circle_id: Uuid;
+  circle_name: string;
+  body: string | null;
+  created_at: IsoDate;
+  rank: number;
+}
+
+export interface YearbookEntry {
+  entry_type: 'post' | 'answer';
+  source_id: Uuid;
+  circle_id: Uuid;
+  circle_name: string;
+  body: string | null;
+  created_at: IsoDate;
+}
+
+export interface CircleParticipationSnapshot {
+  active_members_avg: number | null;
+  posting_members_avg: number | null;
+  answer_rate_avg: number | null;
+  posts_total: number;
+  answers_total: number;
+  reactions_total: number;
 }
 
 type TableDef<Row> = {
@@ -293,9 +346,18 @@ export interface Database {
       join_circle: { Args: { p_code: string }; Returns: Uuid };
       leave_circle: { Args: { p_circle_id: Uuid }; Returns: void };
       rename_circle: { Args: { p_circle_id: Uuid; p_name: string }; Returns: void };
+      check_discovery_quota: { Args: { p_user: Uuid }; Returns: DiscoveryQuota[] };
       get_circle_feed: {
         Args: { p_circle_id: Uuid; p_before?: IsoDate; p_limit?: number };
         Returns: FeedPost[];
+      };
+      get_circle_participation_snapshot: {
+        Args: { p_circle_id: Uuid; p_days?: number };
+        Returns: CircleParticipationSnapshot[];
+      };
+      get_yearbook_entries: {
+        Args: { p_year?: number | null };
+        Returns: YearbookEntry[];
       };
       request_join_circle: {
         Args: { p_circle_id: Uuid; p_intent: string };
@@ -308,6 +370,28 @@ export interface Database {
       decline_join_request: {
         Args: { p_request_id: Uuid };
         Returns: void;
+      };
+      pin_circle_post: {
+        Args: { p_circle_id: Uuid; p_post_id: Uuid | null };
+        Returns: Circle;
+      };
+      search_my_memory: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: MemorySearchResult[];
+      };
+      set_circle_member_role: {
+        Args: { p_circle_id: Uuid; p_member_id: Uuid; p_role: 'member' | 'co_host' };
+        Returns: void;
+      };
+      update_circle_premium_settings: {
+        Args: {
+          p_circle_id: Uuid;
+          p_theme_key?: 'paper' | 'evening' | 'forest' | 'garden' | null;
+          p_onboarding_note?: string | null;
+          p_recap_cadence?: 'monthly' | 'weekly' | null;
+          p_discovery_priority?: number | null;
+        };
+        Returns: Circle;
       };
     };
     Enums: EmptySchemaObject;

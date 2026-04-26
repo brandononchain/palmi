@@ -1266,6 +1266,106 @@ footer .inner {
   margin: 0 0 24px;
 }
 
+.institutional-form {
+  width: 100%;
+  max-width: 760px;
+  margin-top: 18px;
+  text-align: left;
+}
+
+.institutional-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.institutional-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.institutional-field span {
+  color: var(--ink);
+}
+
+.institutional-input,
+.institutional-textarea,
+.institutional-select {
+  width: 100%;
+  border-radius: 18px;
+}
+
+.institutional-select {
+  appearance: none;
+  background: #fff;
+}
+
+.institutional-field-full {
+  display: flex;
+  margin-top: 14px;
+}
+
+.institutional-textarea {
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 16px 18px;
+  font: inherit;
+  color: var(--ink);
+  resize: vertical;
+  min-height: 132px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.institutional-textarea:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px rgba(26, 26, 26, 0.05);
+}
+
+.institutional-textarea::placeholder {
+  color: var(--ink-faint);
+}
+
+.institutional-actions {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.institutional-footnote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+  max-width: 420px;
+}
+
+.institutional-success {
+  max-width: 760px;
+  margin-top: 18px;
+}
+
+@media (max-width: 720px) {
+  .institutional-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .institutional-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .institutional-actions .btn {
+    width: 100%;
+  }
+}
+
 .pricing-faq {
   max-width: 720px;
   margin: 0 auto 64px;

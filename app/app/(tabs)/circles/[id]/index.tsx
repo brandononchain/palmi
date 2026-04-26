@@ -19,12 +19,14 @@ import * as Haptics from 'expo-haptics';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+import { Button } from '@/components/Button';
+import { FadeUpView } from '@/components/FadeUpView';
 import { Screen } from '@/components/Screen';
-import { supabase } from '@/lib/supabase';
-import { moderateAndInsert } from '@/lib/moderation';
-import type { Circle, FeedPost } from '@/lib/database.types';
 import { useAuth } from '@/hooks/useAuth';
-import { colors, radius, spacing, typography } from '@/theme/tokens';
+import { moderateAndInsert } from '@/lib/moderation';
+import { supabase } from '@/lib/supabase';
+import type { Circle, CircleProfile, FeedPost } from '@/lib/database.types';
+import { colors, motion, radius, spacing, typography } from '@/theme/tokens';
 
 interface DailyQuestion {
   id: string;
@@ -36,12 +38,10 @@ interface DailyQuestion {
 interface Member {
   id: string;
   display_name: string;
+  role: 'member' | 'co_host' | 'owner';
 }
 
 const QUICK_MAX = 500;
-
-// Matches a trailing "@query" at the very end of the draft so we can pop the
-// mention picker. Captures the query (letters + numbers + underscore + space).
 const MENTION_TRIGGER = /(^|\s)@([\w]{0,24})$/;
 
 function haptic(kind: 'light' | 'select' | 'success' | 'warn' = 'light') {
@@ -49,12 +49,13 @@ function haptic(kind: 'light' | 'select' | 'success' | 'warn' = 'light') {
   try {
     if (kind === 'light') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     else if (kind === 'select') void Haptics.selectionAsync();
-    else if (kind === 'success')
+    else if (kind === 'success') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    else if (kind === 'warn')
+    } else if (kind === 'warn') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
   } catch {
-    // Older Android devices sometimes throw -- ignore.
+    // Ignore haptic failures on older devices.
   }
 }
 
@@ -65,35 +66,33 @@ export default function CircleFeedScreen() {
 
   let tabBarHeight = 0;
   try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     tabBarHeight = useBottomTabBarHeight();
   } catch {
     tabBarHeight = 0;
   }
 
   const [circle, setCircle] = useState<Circle | null>(null);
+  const [circleProfile, setCircleProfile] = useState<CircleProfile | null>(null);
   const [question, setQuestion] = useState<DailyQuestion | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
-
-  // Composer state
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<FeedPost | null>(null);
-  // Map of display_name -> user_id for any @name inserted in the draft.
   const [mentionMap, setMentionMap] = useState<Record<string, string>>({});
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const inputRef = useRef<RNTextInput | null>(null);
   const listRef = useRef<FlatList<FeedPost> | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
 
-    const [circleRes, questionRes, feedRes, memberRes] = await Promise.all([
+    const [circleRes, questionRes, feedRes, memberRes, profileRes] = await Promise.all([
       (supabase.from('circles') as any).select('*').eq('id', id).maybeSingle(),
       (supabase.from('daily_questions') as any)
         .select('id, question_text, drops_at')
@@ -103,28 +102,35 @@ export default function CircleFeedScreen() {
         .maybeSingle(),
       (supabase.rpc as any)('get_circle_feed', { p_circle_id: id }),
       (supabase.from('memberships') as any)
-        .select('user_id, profiles!inner(id, display_name)')
+        .select('user_id, role, profiles!inner(id, display_name)')
         .eq('circle_id', id)
         .is('left_at', null),
+      (supabase.from('circle_profile') as any).select('*').eq('circle_id', id).maybeSingle(),
     ]);
 
     if (circleRes.data) setCircle(circleRes.data as Circle);
+    if (profileRes.data) setCircleProfile(profileRes.data as CircleProfile);
 
     if (questionRes.data) {
       const { count } = await (supabase.from('question_answers') as any)
         .select('id', { count: 'exact', head: true })
         .eq('question_id', questionRes.data.id);
       setQuestion({ ...questionRes.data, answer_count: count ?? 0 });
+    } else {
+      setQuestion(null);
     }
 
     if (feedRes.data) setPosts(feedRes.data as FeedPost[]);
 
     if (memberRes.data) {
-      const ms: Member[] = (memberRes.data as any[])
-        .map((row) => row.profiles)
-        .filter((p) => p && p.id && p.display_name)
-        .map((p: any) => ({ id: p.id, display_name: p.display_name }));
-      setMembers(ms);
+      const rows: Member[] = (memberRes.data as any[])
+        .map((row) => ({
+          id: row.user_id,
+          display_name: row.profiles?.display_name ?? '?',
+          role: row.role,
+        }))
+        .filter((member) => !!member.id && !!member.display_name);
+      setMembers(rows);
     }
 
     setLoading(false);
@@ -135,8 +141,6 @@ export default function CircleFeedScreen() {
     void load();
   }, [load]);
 
-  // Realtime: posts + reactions for this circle.
-  const channelRef = useRef<RealtimeChannel | null>(null);
   useEffect(() => {
     if (!id) return;
 
@@ -168,26 +172,23 @@ export default function CircleFeedScreen() {
     void load();
   };
 
-  // --- Mention autocomplete ------------------------------------------------
-  const onChangeDraft = (t: string) => {
-    if (t.length > QUICK_MAX) return;
-    setDraft(t);
+  const onChangeDraft = (nextDraft: string) => {
+    if (nextDraft.length > QUICK_MAX) return;
+    setDraft(nextDraft);
     if (sendError) setSendError(null);
 
-    const m = t.match(MENTION_TRIGGER);
-    if (m) {
-      const mentionToken = m[2];
-      setMentionQuery(mentionToken ? mentionToken.toLowerCase() : '');
+    const match = nextDraft.match(MENTION_TRIGGER);
+    if (match) {
+      setMentionQuery(match[2] ? match[2].toLowerCase() : '');
     } else {
       setMentionQuery(null);
     }
 
-    // Prune mentionMap entries whose @Name no longer appears in the text.
-    setMentionMap((prev) => {
+    setMentionMap((current) => {
       const next: Record<string, string> = {};
-      for (const name of Object.keys(prev)) {
-        const mentionId = prev[name];
-        if (mentionId && t.includes(`@${name}`)) next[name] = mentionId;
+      for (const name of Object.keys(current)) {
+        const mentionId = current[name];
+        if (mentionId && nextDraft.includes(`@${name}`)) next[name] = mentionId;
       }
       return next;
     });
@@ -195,23 +196,19 @@ export default function CircleFeedScreen() {
 
   const filteredMembers = useMemo(() => {
     if (mentionQuery === null) return [];
-    const q = mentionQuery.trim();
+    const query = mentionQuery.trim();
     return members
-      .filter((m) => m.id !== user?.id)
-      .filter((m) => (q === '' ? true : m.display_name.toLowerCase().includes(q)))
+      .filter((member) => member.id !== user?.id)
+      .filter((member) => (query === '' ? true : member.display_name.toLowerCase().includes(query)))
       .slice(0, 6);
   }, [members, mentionQuery, user?.id]);
 
-  const pickMention = (m: Member) => {
+  const pickMention = (member: Member) => {
     haptic('select');
-    // Replace the trailing @query with "@DisplayName " (safe chars in name
-    // regex: we only strip whitespace inside the token, so usernames with
-    // spaces would need handling. Our display_name can have spaces, so we
-    // replace with first name or first-word slug.)
-    const token = m.display_name.replace(/\s+/g, '');
+    const token = member.display_name.replace(/\s+/g, '');
     const replaced = draft.replace(MENTION_TRIGGER, (_full, pre) => `${pre}@${token} `);
     setDraft(replaced);
-    setMentionMap((prev) => ({ ...prev, [token]: m.id }));
+    setMentionMap((current) => ({ ...current, [token]: member.id }));
     setMentionQuery(null);
     inputRef.current?.focus();
   };
@@ -226,7 +223,6 @@ export default function CircleFeedScreen() {
     setReplyingTo(null);
   };
 
-  // --- Send ---------------------------------------------------------------
   const handleQuickSend = async () => {
     const text = draft.trim();
     if (!id || !user || !text || sending) return;
@@ -235,7 +231,6 @@ export default function CircleFeedScreen() {
     setSendError(null);
     haptic('light');
 
-    // Resolve mentions present in the final text.
     const activeMentionIds: string[] = [];
     for (const name of Object.keys(mentionMap)) {
       const mentionId = mentionMap[name];
@@ -259,14 +254,14 @@ export default function CircleFeedScreen() {
       reaction_counts: { heart: 0, laugh: 0, wow: 0, support: 0 },
       user_reactions: [],
     };
-    setPosts((prev) => [optimistic, ...prev]);
+
+    setPosts((current) => [optimistic, ...current]);
     setDraft('');
     setMentionMap({});
     setMentionQuery(null);
     const priorReply = replyingTo;
     setReplyingTo(null);
 
-    // Snap list to top so the user sees their message.
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
@@ -283,12 +278,13 @@ export default function CircleFeedScreen() {
 
     if (result.verdict === 'reject') {
       haptic('warn');
-      setPosts((prev) => prev.filter((p) => p.id !== tempId));
+      setPosts((current) => current.filter((post) => post.id !== tempId));
       setDraft(text);
       if (priorReply) setReplyingTo(priorReply);
       setSendError(result.reason ?? "That didn't send -- try rewording.");
       return;
     }
+
     haptic('success');
   };
 
@@ -303,6 +299,17 @@ export default function CircleFeedScreen() {
   }
 
   const showMentionList = mentionQuery !== null && filteredMembers.length > 0;
+  const currentMember = members.find((member) => member.id === user?.id) ?? null;
+  const roleLabel =
+    currentMember?.role === 'owner'
+      ? 'host'
+      : currentMember?.role === 'co_host'
+        ? 'co-host'
+        : 'member';
+  const memberCount = circle?.member_count ?? members.length;
+  const circleSummary = getCircleSummary(circle, circleProfile);
+  const visibleMembers = members.slice(0, 4);
+  const overflowMembers = Math.max(0, members.length - visibleMembers.length);
 
   return (
     <Screen padded={false}>
@@ -313,17 +320,13 @@ export default function CircleFeedScreen() {
       >
         <View style={styles.header}>
           <Pressable
-            onPress={() => {
-              // Always land on the circles list tab. Using router.back() can
-              // pop into the home tab when the detail was pushed from home.
-              router.replace('/(tabs)/circles');
-            }}
+            onPress={() => router.replace('/(tabs)/circles')}
             hitSlop={12}
             style={styles.headerBtn}
           >
             <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
-          <Text style={styles.circleName} numberOfLines={1}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
             {circle?.name}
           </Text>
           <Pressable
@@ -339,19 +342,70 @@ export default function CircleFeedScreen() {
           ref={listRef}
           data={posts}
           keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            question ? (
-              <View style={styles.listHeader}>
-                <QuestionCard
-                  question={question}
-                  onAnswer={() => router.push(`/circles/${id}/answer?qid=${question.id}`)}
-                />
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => (
-            <PostCard post={item} currentUserId={user?.id ?? ''} onReply={startReply} />
+          renderItem={({ item, index }) => (
+            <FadeUpView delay={motion.stagger * Math.min(index + 5, 12)}>
+              <PostCard post={item} currentUserId={user?.id ?? ''} onReply={startReply} />
+            </FadeUpView>
           )}
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <FadeUpView>
+                <View style={styles.heroWrap}>
+                  <View style={styles.heroMetaRow}>
+                    {circleProfile?.purpose ? (
+                      <View style={styles.heroChip}>
+                        <Text style={styles.heroChipText}>{circleProfile.purpose}</Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.heroChip}>
+                      <Text style={styles.heroChipText}>
+                        {circle?.discoverable ? 'findable by fit' : 'private by default'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.heroTitle}>{circle?.name}</Text>
+                  <Text style={styles.heroBody}>{circleSummary}</Text>
+                </View>
+              </FadeUpView>
+
+              <FadeUpView delay={motion.stagger}>
+                <View style={styles.summaryCard}>
+                  <SummaryStat value={String(memberCount)} label="people here" />
+                  <SummaryStat value={String(question?.answer_count ?? 0)} label="answered today" />
+                  <SummaryStat value={roleLabel} label="your place" />
+                </View>
+              </FadeUpView>
+
+              <FadeUpView delay={motion.stagger * 2}>
+                {question ? (
+                  <RitualCard
+                    question={question}
+                    onAnswer={() => router.push(`/circles/${id}/answer?qid=${question.id}`)}
+                  />
+                ) : (
+                  <QuietCard onOpenInfo={() => router.push(`/circles/${id}/info`)} />
+                )}
+              </FadeUpView>
+
+              <FadeUpView delay={motion.stagger * 3}>
+                <CircleContextCard
+                  members={visibleMembers}
+                  overflowMembers={overflowMembers}
+                  onOpenRecaps={() => router.push(`/circles/${id}/recaps`)}
+                  onOpenInfo={() => router.push(`/circles/${id}/info`)}
+                />
+              </FadeUpView>
+
+              <FadeUpView delay={motion.stagger * 4}>
+                <View style={styles.feedHeader}>
+                  <Text style={styles.feedLabel}>recently moved</Text>
+                  <Text style={styles.feedNote}>
+                    after the ritual, this is what shifted in the room.
+                  </Text>
+                </View>
+              </FadeUpView>
+            </View>
+          }
           contentContainerStyle={[styles.list, posts.length === 0 && styles.emptyListContainer]}
           ItemSeparatorComponent={() => <View style={styles.gap} />}
           ListEmptyComponent={
@@ -373,27 +427,25 @@ export default function CircleFeedScreen() {
           showsVerticalScrollIndicator={false}
         />
 
-        {/* Mention autocomplete overlay */}
         {showMentionList && (
           <View style={styles.mentionList}>
-            {filteredMembers.map((m) => (
+            {filteredMembers.map((member) => (
               <Pressable
-                key={m.id}
-                onPress={() => pickMention(m)}
+                key={member.id}
+                onPress={() => pickMention(member)}
                 style={({ pressed }) => [styles.mentionRow, pressed && styles.mentionRowPressed]}
               >
                 <View style={styles.mentionAvatar}>
                   <Text style={styles.mentionAvatarText}>
-                    {m.display_name.charAt(0).toUpperCase()}
+                    {member.display_name.charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                <Text style={styles.mentionName}>{m.display_name}</Text>
+                <Text style={styles.mentionName}>{member.display_name}</Text>
               </Pressable>
             ))}
           </View>
         )}
 
-        {/* Reply chip */}
         {replyingTo && (
           <View style={styles.replyChip}>
             <Ionicons name="arrow-undo" size={14} color={colors.accent} />
@@ -461,35 +513,108 @@ export default function CircleFeedScreen() {
   );
 }
 
-function QuestionCard({ question, onAnswer }: { question: DailyQuestion; onAnswer: () => void }) {
+function SummaryStat({ value, label }: { value: string; label: string }) {
   return (
-    <Pressable
-      onPress={onAnswer}
-      style={({ pressed }) => [styles.questionCard, pressed && styles.questionCardPressed]}
-    >
-      <Text style={styles.questionLabel}>TODAY'S QUESTION</Text>
-      <Text style={styles.questionText}>{question.question_text}</Text>
-      <Text style={styles.questionMeta}>
-        {question.answer_count > 0
-          ? `${question.answer_count} answered -- tap to see`
-          : 'Tap to answer'}
-      </Text>
-    </Pressable>
+    <View style={styles.summaryStat}>
+      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
   );
 }
 
-// Render the post body with @mentions highlighted in accent color.
+function RitualCard({ question, onAnswer }: { question: DailyQuestion; onAnswer: () => void }) {
+  return (
+    <View style={styles.ritualWrap}>
+      <View style={styles.ritualCard}>
+        <Text style={styles.ritualLabel}>today&apos;s ritual</Text>
+        <Text style={styles.ritualTitle}>start here.</Text>
+        <Text style={styles.ritualBody}>{question.question_text}</Text>
+        <Text style={styles.ritualNote}>
+          {question.answer_count > 0
+            ? `${question.answer_count} ${question.answer_count === 1 ? 'person has' : 'people have'} answered already.`
+            : 'no one has answered yet.'}
+        </Text>
+        <Button onPress={onAnswer} fullWidth={false}>
+          answer now
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+function QuietCard({ onOpenInfo }: { onOpenInfo: () => void }) {
+  return (
+    <View style={styles.ritualWrap}>
+      <View style={styles.quietCard}>
+        <Text style={styles.ritualLabel}>today</Text>
+        <Text style={styles.ritualTitle}>no question is open.</Text>
+        <Text style={styles.ritualNote}>
+          this room is quiet right now. you can check the settings or leave it soft.
+        </Text>
+        <Button onPress={onOpenInfo} variant="secondary" fullWidth={false}>
+          open circle info
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+function CircleContextCard({
+  members,
+  overflowMembers,
+  onOpenRecaps,
+  onOpenInfo,
+}: {
+  members: Member[];
+  overflowMembers: number;
+  onOpenRecaps: () => void;
+  onOpenInfo: () => void;
+}) {
+  return (
+    <View style={styles.contextWrap}>
+      <View style={styles.contextCard}>
+        <Text style={styles.contextLabel}>in this room</Text>
+        <View style={styles.memberWrap}>
+          {members.map((member) => (
+            <View key={member.id} style={styles.memberChip}>
+              <View style={styles.memberAvatar}>
+                <Text style={styles.memberAvatarText}>
+                  {member.display_name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.memberChipText}>{member.display_name}</Text>
+            </View>
+          ))}
+          {overflowMembers > 0 && (
+            <View style={styles.memberChip}>
+              <Text style={styles.memberOverflowText}>+{overflowMembers} more</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.contextActions}>
+          <Button onPress={onOpenRecaps} variant="secondary" fullWidth={false}>
+            recaps
+          </Button>
+          <Button onPress={onOpenInfo} variant="ghost" fullWidth={false}>
+            circle info
+          </Button>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function renderBody(body: string) {
   const parts = body.split(/(@[\w]{1,24})/g);
-  return parts.map((part, i) => {
+  return parts.map((part, index) => {
     if (part.startsWith('@') && part.length > 1) {
       return (
-        <Text key={i} style={styles.mentionInBody}>
+        <Text key={index} style={styles.mentionInBody}>
           {part}
         </Text>
       );
     }
-    return <Text key={i}>{part}</Text>;
+    return <Text key={index}>{part}</Text>;
   });
 }
 
@@ -500,9 +625,9 @@ function PostCard({
 }: {
   post: FeedPost;
   currentUserId: string;
-  onReply: (p: FeedPost) => void;
+  onReply: (post: FeedPost) => void;
 }) {
-  const timeAgo = formatRelative(post.created_at);
+  const relativeTime = formatRelative(post.created_at);
   const isMine = post.author_id === currentUserId;
   const isTemp = post.id.startsWith('temp-');
 
@@ -513,7 +638,7 @@ function PostCard({
           <Ionicons name="arrow-undo" size={12} color={colors.inkMuted} />
           <Text style={styles.replyContextText} numberOfLines={1}>
             replying to {post.reply_to_author_name}
-            {post.reply_to_body ? ` -- ${post.reply_to_body}` : ''}
+            {post.reply_to_body ? ` — ${post.reply_to_body}` : ''}
           </Text>
         </View>
       )}
@@ -523,7 +648,7 @@ function PostCard({
           <Text style={styles.avatarText}>{post.author_name.charAt(0).toUpperCase()}</Text>
         </View>
         <Text style={styles.postAuthor}>{isMine ? 'you' : post.author_name}</Text>
-        <Text style={styles.postTime}>{timeAgo}</Text>
+        <Text style={styles.postTime}>{relativeTime}</Text>
       </View>
 
       {post.photo_url && (
@@ -564,7 +689,7 @@ function PostCard({
           active={post.user_reactions.includes('support')}
           postId={post.id}
         />
-        <View style={{ flex: 1 }} />
+        <View style={styles.flexSpacer} />
         {!isTemp && (
           <Pressable
             onPress={() => onReply(post)}
@@ -580,10 +705,11 @@ function PostCard({
 }
 
 function PostVideo({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = false;
-    p.muted = true;
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.loop = false;
+    videoPlayer.muted = true;
   });
+
   return (
     <View style={styles.videoWrap}>
       <VideoView
@@ -625,36 +751,37 @@ function ReactionButton({
     wow: { on: 'flash', off: 'flash-outline' },
     support: { on: 'hand-left', off: 'hand-left-outline' },
   };
+
   const icon = optimisticActive ? iconMap[kind].on : iconMap[kind].off;
 
   const toggle = async () => {
     if (postId.startsWith('temp-')) return;
-    const { data: sess } = await supabase.auth.getSession();
-    const uid = sess.session?.user.id;
-    if (!uid) return;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id;
+    if (!userId) return;
 
     haptic('select');
     const wasActive = optimisticActive;
     setOptimisticActive(!wasActive);
-    setOptimisticCount((c) => Math.max(0, c + (wasActive ? -1 : 1)));
+    setOptimisticCount((current) => Math.max(0, current + (wasActive ? -1 : 1)));
 
     if (wasActive) {
       const { error } = await (supabase.from('reactions') as any)
         .delete()
-        .match({ post_id: postId, user_id: uid, kind });
+        .match({ post_id: postId, user_id: userId, kind });
       if (error) {
         setOptimisticActive(true);
-        setOptimisticCount((c) => c + 1);
+        setOptimisticCount((current) => current + 1);
       }
     } else {
       const { error } = await (supabase.from('reactions') as any).insert({
         post_id: postId,
-        user_id: uid,
+        user_id: userId,
         kind,
       });
       if (error) {
         setOptimisticActive(false);
-        setOptimisticCount((c) => Math.max(0, c - 1));
+        setOptimisticCount((current) => Math.max(0, current - 1));
       }
     }
   };
@@ -682,18 +809,41 @@ function ReactionButton({
 function formatRelative(iso: string): string {
   const now = Date.now();
   const then = new Date(iso).getTime();
-  const mins = Math.floor((now - then) / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
+  const minutes = Math.floor((now - then) / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d`;
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function getCircleSummary(circle: Circle | null, circleProfile: CircleProfile | null) {
+  if (circle?.onboarding_note?.trim()) return circle.onboarding_note.trim();
+  if (circleProfile?.summary?.trim()) return circleProfile.summary.trim();
+  if (circleProfile?.purpose === 'study') return 'A small study room for showing up together.';
+  if (circleProfile?.purpose === 'professional')
+    return 'A quiet room for work, craft, and steady mutual help.';
+  if (circleProfile?.purpose === 'wellness')
+    return 'A gentle room for habits, care, and consistent check-ins.';
+  if (circleProfile?.purpose === 'creator')
+    return 'A small room for works in progress and thoughtful feedback.';
+  return 'A quiet place for your people.';
+}
+
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: {
+    flex: 1,
+  },
+  flexSpacer: {
+    flex: 1,
+  },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -707,9 +857,9 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: radius.full,
   },
-  circleName: {
+  headerTitle: {
     flex: 1,
     fontFamily: typography.fontSerif,
     fontSize: typography.subtitle + 2,
@@ -717,59 +867,199 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: -0.2,
   },
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   list: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
   emptyListContainer: {
     flexGrow: 1,
   },
   listHeader: {
+    paddingTop: spacing.lg,
     gap: spacing.md,
-    marginBottom: spacing.md,
+    paddingBottom: spacing.md,
   },
-  gap: {
-    height: spacing.md,
+  heroWrap: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
   },
-
-  questionCard: {
-    backgroundColor: colors.bgPanel,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  heroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
   },
-  questionCardPressed: {
-    backgroundColor: colors.border,
+  heroChip: {
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
   },
-  questionLabel: {
+  heroChipText: {
     fontFamily: typography.fontSansMedium,
-    fontSize: typography.micro - 2,
-    color: colors.inkFaint,
-    letterSpacing: 1.5,
+    fontSize: typography.micro,
+    color: colors.inkMuted,
   },
-  questionText: {
+  heroTitle: {
     fontFamily: typography.fontSerif,
-    fontSize: typography.subtitle + 2,
+    fontSize: typography.display,
     color: colors.ink,
-    lineHeight: (typography.subtitle + 2) * typography.lineNormal,
-    letterSpacing: -0.2,
+    lineHeight: typography.display * 1.12,
+    letterSpacing: typography.trackTight,
   },
-  questionMeta: {
+  heroBody: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.body,
+    color: colors.inkMuted,
+    lineHeight: typography.body * typography.lineRelaxed,
+    maxWidth: 340,
+  },
+  summaryCard: {
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgPanel,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  summaryStat: {
+    flex: 1,
+    gap: 2,
+  },
+  summaryValue: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.title,
+    color: colors.ink,
+  },
+  summaryLabel: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+  },
+  ritualWrap: {
+    paddingHorizontal: spacing.lg,
+  },
+  ritualCard: {
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  quietCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  ritualLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+  },
+  ritualTitle: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.title,
+    color: colors.ink,
+  },
+  ritualBody: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.subtitle,
+    color: colors.ink,
+    lineHeight: typography.subtitle * typography.lineRelaxed,
+  },
+  ritualNote: {
     fontFamily: typography.fontSans,
     fontSize: typography.caption,
     color: colors.inkMuted,
-    marginTop: spacing.xs,
+    lineHeight: typography.caption * typography.lineRelaxed,
   },
-
+  contextWrap: {
+    paddingHorizontal: spacing.lg,
+  },
+  contextCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  contextLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+  },
+  memberWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  memberChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgPanel,
+  },
+  memberAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.bgCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberAvatarText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkMuted,
+  },
+  memberChipText: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.ink,
+  },
+  memberOverflowText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+  },
+  contextActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  feedHeader: {
+    paddingHorizontal: spacing.lg,
+    gap: 2,
+    paddingTop: spacing.xs,
+  },
+  feedLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+  },
+  feedNote: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+  },
+  gap: {
+    height: spacing.sm,
+  },
   postCard: {
+    marginHorizontal: spacing.lg,
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
@@ -840,7 +1130,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontFamily: typography.fontSansMedium,
   },
-
   replyContext: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -856,7 +1145,6 @@ const styles = StyleSheet.create({
     fontSize: typography.micro,
     color: colors.inkMuted,
   },
-
   reactionRow: {
     flexDirection: 'row',
     gap: spacing.xs,
@@ -889,7 +1177,6 @@ const styles = StyleSheet.create({
   reactionCountActive: {
     color: colors.accent,
   },
-
   empty: {
     paddingVertical: spacing.xxl,
     alignItems: 'center',
@@ -903,8 +1190,6 @@ const styles = StyleSheet.create({
     maxWidth: 260,
     lineHeight: typography.body * typography.lineRelaxed,
   },
-
-  // --- Mention autocomplete list ------------------------------------------
   mentionList: {
     backgroundColor: colors.bgCard,
     borderTopWidth: 1,
@@ -939,8 +1224,6 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.ink,
   },
-
-  // --- Reply chip ---------------------------------------------------------
   replyChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -965,8 +1248,6 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     marginTop: 2,
   },
-
-  // --- Quick send composer ------------------------------------------------
   quickBar: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
@@ -1002,7 +1283,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 20,
+    borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     paddingTop: Platform.OS === 'ios' ? 10 : 8,
     paddingBottom: Platform.OS === 'ios' ? 10 : 8,

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -13,19 +13,27 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
+import { FadeUpView } from '@/components/FadeUpView';
+import { Screen } from '@/components/Screen';
+import type {
+  DiscoveredCircle,
+  DiscoverResponse,
+  DiscoveryQuota,
+  Uuid,
+} from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
-import type { DiscoverResponse, DiscoveredCircle, Uuid } from '@/lib/database.types';
-import { colors, radius, spacing, typography } from '@/theme/tokens';
+import { colors, motion, radius, spacing, typography } from '@/theme/tokens';
 
-// ---------------------------------------------------------------------------
-// Phase 2.6: discovery screen
-// ---------------------------------------------------------------------------
-// Single calm input. No "AI" branding visible. Calls the discover-circles
-// edge function and renders up to five candidate circles. Each row offers a
-// "request to join" CTA that opens an intent sheet.
-// ---------------------------------------------------------------------------
+const SUGGESTIONS = [
+  'weekly check-ins',
+  'founders in the same stage',
+  'small study group',
+  'creative practice circle',
+  'career transition room',
+];
+
+const REFINEMENTS = ['smaller group', 'more structured', 'more private', 'more local'];
 
 export default function FindCircleScreen() {
   const router = useRouter();
@@ -35,40 +43,81 @@ export default function FindCircleScreen() {
   const [results, setResults] = useState<DiscoveredCircle[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [requestTarget, setRequestTarget] = useState<DiscoveredCircle | null>(null);
+  const [quota, setQuota] = useState<DiscoveryQuota | null>(null);
 
   const trimmed = query.trim();
   const canSearch = trimmed.length >= 3 && !loading;
 
-  const handleSearch = useCallback(async () => {
-    if (!canSearch) return;
-    setLoading(true);
-    setError(null);
-    setHasSearched(true);
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke('discover-circles', {
-        body: { query_text: trimmed },
-      });
-      const payload = data as DiscoverResponse | null;
-      if (fnErr) {
-        setError('Could not reach the matcher. Try again in a moment.');
-        setResults([]);
-      } else {
-        setResults(payload?.results ?? []);
+  const loadQuota = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.rpc('check_discovery_quota', { p_user: user.id });
+    setQuota(((data ?? [])[0] ?? null) as DiscoveryQuota | null);
+  }, []);
+
+  useEffect(() => {
+    void loadQuota();
+  }, [loadQuota]);
+
+  const runSearch = useCallback(
+    async (explicitQuery?: string) => {
+      const searchText = (explicitQuery ?? query).trim();
+      if (searchText.length < 3) return;
+      if (quota && quota.quota >= 0 && quota.remaining <= 0) {
+        setError('You’ve used this month’s introductions. Premium+ keeps the network open.');
+        return;
       }
-    } catch {
-      setError('Could not reach the matcher. Try again in a moment.');
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [canSearch, trimmed]);
+
+      setLoading(true);
+      setError(null);
+      setHasSearched(true);
+      setQuery(searchText);
+
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('discover-circles', {
+          body: { query_text: searchText },
+        });
+        const payload = data as DiscoverResponse | null;
+
+        if (fnError) {
+          setResults([]);
+          setError('That didn’t run through. Try again in a moment.');
+        } else {
+          setResults(payload?.results ?? []);
+          if (payload?.quota) setQuota(payload.quota);
+        }
+      } catch {
+        setResults([]);
+        setError('That didn’t run through. Try again in a moment.');
+      } finally {
+        setLoading(false);
+        void loadQuota();
+      }
+    },
+    [loadQuota, query, quota]
+  );
+
+  const quotaCopy = useMemo(() => {
+    if (!quota) return null;
+    if (quota.quota < 0) return 'the network stays open as long as you need it.';
+    return `${quota.remaining} introductions left this month.`;
+  }, [quota]);
+
+  const applySuggestion = (text: string) => {
+    setQuery(text);
+    setError(null);
+    setHasSearched(false);
+  };
+
+  const applyRefinement = (text: string) => {
+    void runSearch(mergeQuery(query, text));
+  };
 
   const handleRequested = (circleId: Uuid) => {
     setRequestTarget(null);
-    // Remove the just-requested circle from the visible list to avoid
-    // double-submits; the requester can see status under their own profile
-    // (later phase) or by re-searching.
-    setResults((prev) => prev.filter((r) => r.circle_id !== circleId));
+    setResults((current) => current.filter((result) => result.circle_id !== circleId));
   };
 
   return (
@@ -77,7 +126,7 @@ export default function FindCircleScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back}>
           <Text style={styles.backText}>‹</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>find a circle</Text>
+        <Text style={styles.headerTitle}>circle network</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -86,50 +135,109 @@ export default function FindCircleScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.lede}>
-          tell us in your own words what you’re looking for. small, private, and only circles whose
-          owners chose to be findable will show up.
-        </Text>
-
-        <View style={styles.inputBlock}>
-          <TextInput
-            value={query}
-            onChangeText={(t) => t.length <= 500 && setQuery(t)}
-            placeholder="e.g. a small biology study group, weekly check-ins"
-            placeholderTextColor={colors.inkFaint}
-            multiline
-            style={styles.input}
-            autoFocus
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-            blurOnSubmit
-          />
-          <View style={styles.inputFooter}>
-            <Text style={styles.counter}>{500 - query.length}</Text>
-            <Button
-              onPress={handleSearch}
-              disabled={!canSearch}
-              loading={loading}
-              fullWidth={false}
-            >
-              find
-            </Button>
+        <FadeUpView>
+          <View style={styles.composeCard}>
+            <Text style={styles.composeLabel}>step one</Text>
+            <Text style={styles.composeTitle}>describe the room you need.</Text>
+            <Text style={styles.composeBody}>
+              say it plainly. palmi looks for shape, cadence, and social fit across the circles that
+              chose to be findable.
+            </Text>
+            <View style={styles.suggestionWrap}>
+              {SUGGESTIONS.map((suggestion) => (
+                <Pressable
+                  key={suggestion}
+                  onPress={() => applySuggestion(suggestion)}
+                  style={({ pressed }) => [styles.suggestionChip, pressed && styles.softPressed]}
+                >
+                  <Text style={styles.suggestionText}>{suggestion}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
+        </FadeUpView>
+
+        {quotaCopy && (
+          <FadeUpView delay={motion.stagger}>
+            <View style={styles.quotaCard}>
+              <Text style={styles.quotaLabel}>network access</Text>
+              <Text style={styles.quotaBody}>{quotaCopy}</Text>
+            </View>
+          </FadeUpView>
+        )}
+
+        <FadeUpView delay={motion.stagger * 2}>
+          <View style={styles.inputBlock}>
+            <TextInput
+              value={query}
+              onChangeText={(text) => text.length <= 500 && setQuery(text)}
+              placeholder="a small biology study group that checks in weekly"
+              placeholderTextColor={colors.inkFaint}
+              multiline
+              style={styles.input}
+              autoFocus
+              returnKeyType="search"
+              onSubmitEditing={() => void runSearch()}
+              blurOnSubmit
+            />
+            <View style={styles.inputFooter}>
+              <Text style={styles.counter}>{500 - query.length}</Text>
+              <Button
+                onPress={() => void runSearch()}
+                disabled={!canSearch}
+                loading={loading}
+                fullWidth={false}
+              >
+                ask palmi
+              </Button>
+            </View>
+          </View>
+        </FadeUpView>
 
         {error && <Text style={styles.errorText}>{error}</Text>}
 
+        {hasSearched && results.length > 0 && (
+          <FadeUpView delay={motion.stagger * 3}>
+            <View style={styles.refineWrap}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionLabel}>tighten the fit</Text>
+              </View>
+              <View style={styles.refineRow}>
+                {REFINEMENTS.map((refinement) => (
+                  <Pressable
+                    key={refinement}
+                    onPress={() => applyRefinement(refinement)}
+                    style={({ pressed }) => [styles.refineChip, pressed && styles.softPressed]}
+                  >
+                    <Text style={styles.refineText}>{refinement}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </FadeUpView>
+        )}
+
         {hasSearched && !loading && !error && results.length === 0 && (
-          <EmptyResults onCreate={() => router.push('/circles/new')} />
+          <FadeUpView delay={motion.stagger * 4}>
+            <EmptyResults onCreate={() => router.push('/circles/new')} onRetry={applySuggestion} />
+          </FadeUpView>
         )}
 
         {results.length > 0 && (
           <View style={styles.resultsBlock}>
-            <Text style={styles.resultsLabel}>
-              {results.length === 1 ? '1 circle' : `${results.length} circles`}
-            </Text>
-            {results.map((r) => (
-              <ResultCard key={r.circle_id} result={r} onRequest={() => setRequestTarget(r)} />
+            <FadeUpView delay={motion.stagger * 4}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionLabel}>rooms that fit</Text>
+              </View>
+            </FadeUpView>
+            {results.map((result, index) => (
+              <FadeUpView key={result.circle_id} delay={motion.stagger * Math.min(index + 5, 12)}>
+                <ResultCard
+                  result={result}
+                  index={index}
+                  onRequest={() => setRequestTarget(result)}
+                />
+              </FadeUpView>
             ))}
           </View>
         )}
@@ -146,30 +254,66 @@ export default function FindCircleScreen() {
   );
 }
 
-function ResultCard({ result, onRequest }: { result: DiscoveredCircle; onRequest: () => void }) {
+function ResultCard({
+  result,
+  index,
+  onRequest,
+}: {
+  result: DiscoveredCircle;
+  index: number;
+  onRequest: () => void;
+}) {
+  const strength = index === 0 ? 'closest match' : index === 1 ? 'good fit' : 'worth a look';
+  const admissionLabel =
+    result.admission_mode === 'open_screened' ? 'screened entry' : 'owner review';
+  const reasons = summarizeFit(result.fit_reason);
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.cardName}>{result.name}</Text>
-        {result.purpose && (
-          <View style={styles.purposeChip}>
-            <Text style={styles.purposeChipText}>{result.purpose}</Text>
+        <View style={styles.cardHeaderText}>
+          <Text style={styles.cardStrength}>{strength}</Text>
+          <Text style={styles.cardName}>{result.name}</Text>
+        </View>
+        <View style={styles.cardBadges}>
+          {result.purpose ? (
+            <View style={styles.purposeChip}>
+              <Text style={styles.purposeChipText}>{result.purpose}</Text>
+            </View>
+          ) : null}
+          <View
+            style={[
+              styles.admissionChip,
+              result.admission_mode === 'open_screened'
+                ? styles.admissionChipOpen
+                : styles.admissionChipReview,
+            ]}
+          >
+            <Text style={styles.admissionChipText}>{admissionLabel}</Text>
           </View>
-        )}
+        </View>
       </View>
-      {result.blurb && <Text style={styles.cardBlurb}>{result.blurb}</Text>}
-      <Text style={styles.cardFit}>{result.fit_reason}</Text>
+
+      {result.blurb ? <Text style={styles.cardBlurb}>{result.blurb}</Text> : null}
+
+      <View style={styles.fitBlock}>
+        <Text style={styles.fitLabel}>why this fits</Text>
+        {reasons.map((reason) => (
+          <View key={reason} style={styles.fitRow}>
+            <Text style={styles.fitBullet}>•</Text>
+            <Text style={styles.fitReason}>{reason}</Text>
+          </View>
+        ))}
+      </View>
+
       <View style={styles.cardMeta}>
         <Text style={styles.cardMetaText}>
           {result.member_count} {result.member_count === 1 ? 'person' : 'people'}
         </Text>
-        <Text style={styles.cardMetaDot}>·</Text>
-        <Text style={styles.cardMetaText}>
-          {result.admission_mode === 'open_screened' ? 'open with screening' : 'request to join'}
-        </Text>
       </View>
+
       <View style={styles.cardActions}>
-        <Button onPress={onRequest} variant="primary">
+        <Button onPress={onRequest} fullWidth={false}>
           request to join
         </Button>
       </View>
@@ -177,13 +321,27 @@ function ResultCard({ result, onRequest }: { result: DiscoveredCircle; onRequest
   );
 }
 
-function EmptyResults({ onCreate }: { onCreate: () => void }) {
+function EmptyResults({
+  onCreate,
+  onRetry,
+}: {
+  onCreate: () => void;
+  onRetry: (text: string) => void;
+}) {
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>nothing close enough yet.</Text>
       <Text style={styles.emptyLede}>
-        try a different phrasing, or start a circle of your own and let people find it.
+        broaden the room, try a simpler phrasing, or start the one you were hoping to find.
       </Text>
+      <View style={styles.refineRow}>
+        <Pressable onPress={() => onRetry('weekly check-ins')} style={styles.refineChip}>
+          <Text style={styles.refineText}>try weekly check-ins</Text>
+        </Pressable>
+        <Pressable onPress={() => onRetry('small study group')} style={styles.refineChip}>
+          <Text style={styles.refineText}>try study group</Text>
+        </Pressable>
+      </View>
       <Button onPress={onCreate} variant="ghost" fullWidth={false}>
         start a circle
       </Button>
@@ -209,22 +367,21 @@ function RequestSheet({
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+
     setSubmitting(true);
     setError(null);
 
-    const { data: requestId, error: rpcErr } = await supabase.rpc('request_join_circle', {
+    const { data: requestId, error: rpcError } = await supabase.rpc('request_join_circle', {
       p_circle_id: circle.circle_id,
       p_intent: trimmed,
     });
 
-    if (rpcErr || !requestId) {
+    if (rpcError || !requestId) {
       setSubmitting(false);
-      setError(rpcErr?.message ?? 'Could not send request');
+      setError(rpcError?.message ?? 'Could not send request');
       return;
     }
 
-    // Fire-and-forget screening for open_screened circles. We don't block the
-    // user on this — it runs server-side and writes a recommendation back.
     if (circle.admission_mode === 'open_screened') {
       void supabase.functions.invoke('screen-join-request', {
         body: { request_id: requestId },
@@ -235,8 +392,8 @@ function RequestSheet({
     Alert.alert(
       'sent',
       circle.admission_mode === 'open_screened'
-        ? 'we let the owner know. you may be approved automatically.'
-        : 'we let the owner know. they’ll review when they’re back.',
+        ? 'we let the owner know. if the fit is clearly safe, you may be approved automatically.'
+        : 'we let the owner know. they’ll read it when they’re back.',
       [{ text: 'ok', onPress: () => onRequested(circle.circle_id) }]
     );
   };
@@ -251,12 +408,12 @@ function RequestSheet({
         <View style={styles.sheet}>
           <Text style={styles.sheetTitle}>request to join</Text>
           <Text style={styles.sheetHint}>
-            a sentence or two on why this circle. the owner sees only your name and what you write
-            here.
+            a sentence or two on why this room feels right. the owner sees only your name and what
+            you write here.
           </Text>
           <TextInput
             value={intent}
-            onChangeText={(t) => t.length <= 500 && setIntent(t)}
+            onChangeText={(text) => text.length <= 500 && setIntent(text)}
             autoFocus
             multiline
             placeholder="i’m studying for the mcat in spring and would love a small group to check in weekly…"
@@ -284,6 +441,22 @@ function RequestSheet({
   );
 }
 
+function mergeQuery(base: string, addition: string) {
+  const trimmedBase = base.trim();
+  if (!trimmedBase) return addition;
+  if (trimmedBase.toLowerCase().includes(addition.toLowerCase())) return trimmedBase;
+  return `${trimmedBase}, ${addition}`;
+}
+
+function summarizeFit(fitReason: string) {
+  const parts = fitReason
+    .split(/[.;]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return parts.length > 0 ? parts : [fitReason];
+}
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -293,8 +466,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  backText: { fontSize: 32, color: colors.ink, fontWeight: '300', lineHeight: 32 },
+  back: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backText: {
+    fontSize: 32,
+    color: colors.ink,
+    fontWeight: '300',
+    lineHeight: 32,
+  },
   headerTitle: {
     flex: 1,
     fontFamily: typography.fontSerif,
@@ -303,33 +486,93 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: -0.2,
   },
-  headerSpacer: { width: 44, height: 44 },
-
+  headerSpacer: {
+    width: 44,
+    height: 44,
+  },
   scroll: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxxl,
     gap: spacing.lg,
   },
-
-  lede: {
+  composeCard: {
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  composeLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  composeTitle: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.title,
+    color: colors.ink,
+  },
+  composeBody: {
     fontFamily: typography.fontSans,
     fontSize: typography.body,
     color: colors.inkMuted,
     lineHeight: typography.body * typography.lineRelaxed,
   },
-
-  inputBlock: {
-    backgroundColor: colors.bgPanel,
+  suggestionWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  suggestionChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  suggestionText: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.ink,
+  },
+  quotaCard: {
+    backgroundColor: colors.bgCard,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  quotaLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  quotaBody: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+    lineHeight: typography.caption * typography.lineRelaxed,
+  },
+  inputBlock: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.xl,
     padding: spacing.md,
     gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   input: {
     fontFamily: typography.fontSerif,
     fontSize: typography.subtitle,
     color: colors.ink,
-    minHeight: 90,
+    minHeight: 96,
     textAlignVertical: 'top',
     lineHeight: typography.subtitle * typography.lineNormal,
   },
@@ -344,26 +587,46 @@ const styles = StyleSheet.create({
     fontSize: typography.micro,
     color: colors.inkFaint,
   },
-
   errorText: {
     fontFamily: typography.fontSans,
     fontSize: typography.caption,
     color: colors.danger,
   },
-
+  refineWrap: {
+    gap: spacing.sm,
+  },
+  sectionHead: {
+    paddingBottom: spacing.xs,
+  },
+  sectionLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+  },
+  refineRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  refineChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgPanel,
+  },
+  refineText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.caption,
+    color: colors.ink,
+  },
   resultsBlock: {
     gap: spacing.md,
   },
-  resultsLabel: {
-    fontFamily: typography.fontSansMedium,
-    fontSize: typography.micro - 2,
-    color: colors.inkFaint,
-    letterSpacing: 1.5,
-  },
-
   card: {
     backgroundColor: colors.bgCard,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
@@ -371,16 +634,29 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  cardName: {
+  cardHeaderText: {
     flex: 1,
+    gap: 2,
+  },
+  cardStrength: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  cardName: {
     fontFamily: typography.fontSerif,
     fontSize: typography.subtitle + 2,
     color: colors.ink,
-    letterSpacing: -0.2,
+  },
+  cardBadges: {
+    alignItems: 'flex-end',
+    gap: spacing.xs,
   },
   purposeChip: {
     backgroundColor: colors.bgPanel,
@@ -393,14 +669,55 @@ const styles = StyleSheet.create({
     fontSize: typography.micro,
     color: colors.inkMuted,
   },
+  admissionChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  admissionChipOpen: {
+    backgroundColor: '#E9F0E7',
+  },
+  admissionChipReview: {
+    backgroundColor: '#F2EAD8',
+  },
+  admissionChipText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkMuted,
+  },
   cardBlurb: {
     fontFamily: typography.fontSans,
     fontSize: typography.body,
     color: colors.ink,
     lineHeight: typography.body * typography.lineRelaxed,
   },
-  cardFit: {
-    fontFamily: typography.fontSerifItalic,
+  fitBlock: {
+    padding: spacing.md,
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.lg,
+    gap: spacing.xs,
+  },
+  fitLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  fitRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    alignItems: 'flex-start',
+  },
+  fitBullet: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.caption,
+    color: colors.accent,
+    marginTop: 1,
+  },
+  fitReason: {
+    flex: 1,
+    fontFamily: typography.fontSans,
     fontSize: typography.caption,
     color: colors.inkMuted,
     lineHeight: typography.caption * typography.lineRelaxed,
@@ -408,14 +725,8 @@ const styles = StyleSheet.create({
   cardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
   },
   cardMetaText: {
-    fontFamily: typography.fontSans,
-    fontSize: typography.micro,
-    color: colors.inkFaint,
-  },
-  cardMetaDot: {
     fontFamily: typography.fontSans,
     fontSize: typography.micro,
     color: colors.inkFaint,
@@ -423,11 +734,10 @@ const styles = StyleSheet.create({
   cardActions: {
     marginTop: spacing.xs,
   },
-
   empty: {
-    paddingVertical: spacing.xl,
     gap: spacing.md,
     alignItems: 'flex-start',
+    paddingVertical: spacing.md,
   },
   emptyTitle: {
     fontFamily: typography.fontSerif,
@@ -440,14 +750,17 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     lineHeight: typography.body * typography.lineRelaxed,
   },
-
-  // Sheet
+  softPressed: {
+    backgroundColor: colors.border,
+  },
   sheetBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
-  sheetDismiss: { flex: 1 },
+  sheetDismiss: {
+    flex: 1,
+  },
   sheet: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: radius.xl,
@@ -468,23 +781,24 @@ const styles = StyleSheet.create({
     lineHeight: typography.caption * typography.lineRelaxed,
   },
   sheetInput: {
-    fontFamily: typography.fontSans,
-    fontSize: typography.body,
-    color: colors.ink,
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.md,
+    minHeight: 120,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    minHeight: 120,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgCard,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontFamily: typography.fontSerif,
+    fontSize: typography.body,
+    color: colors.ink,
     textAlignVertical: 'top',
     lineHeight: typography.body * typography.lineRelaxed,
   },
   sheetCounter: {
+    alignSelf: 'flex-end',
     fontFamily: typography.fontSans,
     fontSize: typography.micro,
     color: colors.inkFaint,
-    alignSelf: 'flex-end',
   },
   sheetError: {
     fontFamily: typography.fontSans,
@@ -494,7 +808,8 @@ const styles = StyleSheet.create({
   sheetButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

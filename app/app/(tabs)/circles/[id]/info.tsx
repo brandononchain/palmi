@@ -335,6 +335,17 @@ export default function CircleInfoScreen() {
           </View>
         )}
 
+        {isOwner && circle && (
+          <Pressable
+            onPress={() => router.push(`/(tabs)/circles/${circle.id}/premium`)}
+            style={({ pressed }) => [styles.requestsRow, pressed && styles.requestsRowPressed]}
+            hitSlop={8}
+          >
+            <Text style={styles.requestsRowLabel}>premium studio</Text>
+            <Text style={styles.requestsRowArrow}>›</Text>
+          </Pressable>
+        )}
+
         {/* Notifications */}
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>

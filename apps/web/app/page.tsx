@@ -1,4 +1,5 @@
 import { WaitlistForm } from './components/WaitlistForm';
+import { LandingViewTracker, TrackedFunnelLink } from './components/FunnelTracking';
 import { ScrollEffects } from './components/ScrollEffects';
 
 const WAITLIST_COUNT = process.env.NEXT_PUBLIC_WAITLIST_COUNT ?? '2,847';
@@ -6,6 +7,7 @@ const WAITLIST_COUNT = process.env.NEXT_PUBLIC_WAITLIST_COUNT ?? '2,847';
 export default function LandingPage() {
   return (
     <>
+      <LandingViewTracker />
       <ScrollEffects />
 
       <nav id="nav">
@@ -18,9 +20,9 @@ export default function LandingPage() {
             <a href="#how">How it works</a>
             <a href="#manifesto">Manifesto</a>
             <a href="/pricing">Pricing</a>
-            <a href="#waitlist" className="nav-cta">
+            <TrackedFunnelLink href="#waitlist" className="nav-cta" source="nav">
               Request access
-            </a>
+            </TrackedFunnelLink>
           </div>
         </div>
       </nav>
@@ -43,7 +45,7 @@ export default function LandingPage() {
               <br />
               One question a day.
               <br />
-              No feed. No noise. Just real connection.
+              No public feed. No noise. Just real connection.
             </p>
 
             <WaitlistForm source="hero" />
@@ -125,7 +127,19 @@ export default function LandingPage() {
 
                   <div className="phone-divider" />
 
-                  <div className="phone-section-label">recent activity</div>
+                  <div className="phone-section-head">
+                    <span className="phone-section-label">today&apos;s ritual</span>
+                  </div>
+
+                  <div className="phone-circle-card" style={{ marginBottom: 14 }}>
+                    <span className="phone-circle-card-name">the group chat</span>
+                    <span className="phone-activity-body">
+                      what felt unexpectedly generous this week?
+                    </span>
+                    <span className="phone-circle-card-meta">answer now</span>
+                  </div>
+
+                  <div className="phone-section-label">after the question</div>
 
                   <div className="phone-activity">
                     <div className="phone-activity-head">
@@ -268,7 +282,7 @@ export default function LandingPage() {
               </li>
             </ul>
           </div>
-          <div className="manifesto-closer reveal">Small circles. No noise.</div>
+          <div className="manifesto-closer reveal">Small circles. No public feed.</div>
         </section>
 
         {/* HOW IT WORKS */}
