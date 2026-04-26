@@ -4,6 +4,97 @@ import { ScrollEffects } from './components/ScrollEffects';
 
 const WAITLIST_COUNT = process.env.NEXT_PUBLIC_WAITLIST_COUNT ?? '2,847';
 
+function HowCreateCirclePreview() {
+  return (
+    <div className="how-preview how-preview-circles" aria-hidden="true">
+      <div className="how-preview-topline">
+        <span className="how-preview-wordmark">palmi</span>
+        <span className="how-preview-meta">3 circles</span>
+      </div>
+
+      <div className="how-circle-list">
+        <div className="how-circle-row">
+          <span className="how-circle-dot how-circle-dot-sand" />
+          <div className="how-circle-copy">
+            <span className="how-circle-name">the group chat</span>
+            <span className="how-circle-status how-circle-status-accent">ritual waiting</span>
+            <span className="how-circle-members">6 people</span>
+          </div>
+          <span className="how-circle-arrow">›</span>
+        </div>
+
+        <div className="how-circle-row">
+          <span className="how-circle-dot how-circle-dot-lilac" />
+          <div className="how-circle-copy">
+            <span className="how-circle-name">studio 3</span>
+            <span className="how-circle-status">answered today</span>
+            <span className="how-circle-members">4 people</span>
+          </div>
+          <span className="how-circle-arrow">›</span>
+        </div>
+      </div>
+
+      <div className="how-circle-actions">
+        <span className="how-action-pill how-action-pill-primary">start a new circle</span>
+        <span className="how-action-pill">join with a code</span>
+      </div>
+    </div>
+  );
+}
+
+function HowDailyQuestionPreview() {
+  return (
+    <div className="how-preview how-preview-ritual" aria-hidden="true">
+      <span className="how-preview-label">today&apos;s ritual</span>
+      <h3 className="how-preview-title">start here.</h3>
+
+      <div className="how-preview-row">
+        <span className="how-preview-accent">the group chat</span>
+        <span className="how-preview-faint">waiting</span>
+      </div>
+
+      <p className="how-preview-question">what felt unexpectedly generous this week?</p>
+      <p className="how-preview-note">
+        2 rooms have a ritual open. this is the closest one to begin with.
+      </p>
+      <p className="how-preview-helper">the same ritual status is tagged in your circles list.</p>
+
+      <span className="how-action-pill how-action-pill-primary">answer now</span>
+    </div>
+  );
+}
+
+function HowStayConnectedPreview() {
+  return (
+    <div className="how-preview how-preview-feed" aria-hidden="true">
+      <div className="how-feed-head">
+        <span className="how-feed-label">recently moved</span>
+        <span className="how-feed-note">after the question, this is what shifted.</span>
+      </div>
+
+      <div className="how-feed-item">
+        <div className="how-feed-row">
+          <span className="how-preview-accent">the group chat</span>
+          <span className="how-preview-faint">2h ago</span>
+        </div>
+        <p className="how-feed-body">
+          a mug, three pens that don&apos;t work, and a very judgmental cat
+        </p>
+        <span className="how-feed-author">jordan</span>
+      </div>
+
+      <div className="how-feed-item">
+        <div className="how-feed-row">
+          <span className="how-preview-accent">sunday runs</span>
+          <span className="how-preview-faint">yesterday</span>
+        </div>
+        <p className="how-feed-body how-feed-body-italic">shared a photo</p>
+        <span className="how-feed-author">ava</span>
+      </div>
+    </div>
+  );
+}
+
 export default function LandingPage() {
   return (
     <>
@@ -365,20 +456,7 @@ export default function LandingPage() {
                 <div className="how-desc">5&ndash;15 people you actually care about.</div>
               </div>
               <div className="how-viz">
-                <svg width="140" height="70" viewBox="0 0 140 70" fill="none">
-                  <circle cx="30" cy="35" r="16" fill="#E8C5A0" />
-                  <circle cx="62" cy="35" r="16" fill="#B8B0D8" />
-                  <circle cx="94" cy="35" r="16" fill="#A8C8B0" />
-                  <circle
-                    cx="122"
-                    cy="35"
-                    r="10"
-                    fill="none"
-                    stroke="#A5A099"
-                    strokeWidth="1.5"
-                    strokeDasharray="2 3"
-                  />
-                </svg>
+                <HowCreateCirclePreview />
               </div>
             </div>
 
@@ -389,21 +467,7 @@ export default function LandingPage() {
                 <div className="how-desc">Simple, thoughtful, consistent.</div>
               </div>
               <div className="how-viz">
-                <svg width="160" height="70" viewBox="0 0 160 70" fill="none">
-                  <rect
-                    x="0"
-                    y="20"
-                    width="160"
-                    height="32"
-                    rx="10"
-                    fill="#F4F1EB"
-                    stroke="#E8E4DE"
-                    strokeWidth="1"
-                  />
-                  <circle cx="14" cy="36" r="4" fill="#D65745" />
-                  <rect x="26" y="30" width="80" height="4" rx="2" fill="#1A1A1A" opacity="0.7" />
-                  <rect x="26" y="38" width="50" height="3" rx="1.5" fill="#A5A099" />
-                </svg>
+                <HowDailyQuestionPreview />
               </div>
             </div>
 
@@ -414,11 +478,7 @@ export default function LandingPage() {
                 <div className="how-desc">No feeds, no pressure, no noise.</div>
               </div>
               <div className="how-viz">
-                <svg width="160" height="70" viewBox="0 0 160 70" fill="none">
-                  <rect x="10" y="10" width="60" height="50" rx="8" fill="#fff" stroke="#E8E4DE" />
-                  <rect x="76" y="10" width="74" height="24" rx="8" fill="#fff" stroke="#E8E4DE" />
-                  <rect x="76" y="38" width="74" height="22" rx="8" fill="#fff" stroke="#E8E4DE" />
-                </svg>
+                <HowStayConnectedPreview />
               </div>
             </div>
           </div>
