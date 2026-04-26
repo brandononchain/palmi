@@ -16,6 +16,7 @@ const PROGRAM_TYPES = [
 ] as const;
 
 export function InstitutionalInquiryForm() {
+  const [website, setWebsite] = useState('');
   const [organizationName, setOrganizationName] = useState('');
   const [workEmail, setWorkEmail] = useState('');
   const [programType, setProgramType] = useState<(typeof PROGRAM_TYPES)[number]['value']>('cohort');
@@ -42,13 +43,14 @@ export function InstitutionalInquiryForm() {
     setError(null);
     startTransition(async () => {
       const fd = new FormData();
+      fd.set('website', website.trim());
       fd.set('organizationName', trimmedOrg);
       fd.set('workEmail', trimmedEmail);
       fd.set('programType', programType);
       fd.set('cohortSize', cohortSize.trim());
       fd.set('note', note.trim());
       fd.set('source', 'pricing-programs');
-      fd.set('website', '');
+      fd.set('company', '');
 
       const res = await submitInstitutionalInquiry(fd);
       if (res.ok) {
@@ -78,17 +80,30 @@ export function InstitutionalInquiryForm() {
     <>
       <form className="institutional-form" onSubmit={submit} noValidate>
         <div className="waitlist-honeypot" aria-hidden="true">
-          <label htmlFor="website-programs">Website</label>
+          <label htmlFor="company-programs">Company</label>
           <input
-            id="website-programs"
+            id="company-programs"
             type="text"
-            name="website"
+            name="company"
             tabIndex={-1}
             autoComplete="off"
           />
         </div>
 
         <div className="institutional-grid">
+          <label className="institutional-field">
+            <span>Website</span>
+            <input
+              type="url"
+              className="input institutional-input"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://example.org"
+              disabled={pending}
+              autoComplete="url"
+            />
+          </label>
+
           <label className="institutional-field">
             <span>Organization or program</span>
             <input
@@ -130,7 +145,7 @@ export function InstitutionalInquiryForm() {
             </select>
           </label>
 
-          <label className="institutional-field">
+          <label className="institutional-field institutional-field-full">
             <span>Approximate size</span>
             <input
               className="input institutional-input"
