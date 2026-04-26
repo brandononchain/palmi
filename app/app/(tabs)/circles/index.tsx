@@ -1,18 +1,25 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, FlatList, Pressable, RefreshControl } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 
+import { PalmiWordmark } from '@/components/Brand';
 import { Screen } from '@/components/Screen';
 import { Button } from '@/components/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import type { Circle } from '@/lib/database.types';
-import { colors, spacing, typography } from '@/theme/tokens';
+import { colors, radius, spacing, typography } from '@/theme/tokens';
+
+interface RitualStatus {
+  label: string;
+  tone: 'accent' | 'muted';
+}
 
 export default function CirclesScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [circles, setCircles] = useState<Circle[]>([]);
+  const [statusById, setStatusById] = useState<Record<string, RitualStatus>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -36,6 +43,79 @@ export default function CirclesScreen() {
         .map((m) => m.circles)
         .filter((c): c is Circle => !!c && !c.deleted_at);
       setCircles(myCircles);
+
+      const circleIds = myCircles.map((circle) => circle.id);
+      if (circleIds.length === 0) {
+        setStatusById({});
+      } else {
+        const { data: questionRows } = await supabase
+          .from('daily_questions')
+          .select('id, circle_id, drops_at')
+          .in('circle_id', circleIds)
+          .order('drops_at', { ascending: false })
+          .limit(Math.max(circleIds.length * 3, 12));
+
+        const latestQuestionByCircle = new Map<string, { id: string; circle_id: string }>();
+        for (const row of (questionRows ?? []) as any[]) {
+          if (!latestQuestionByCircle.has(row.circle_id)) {
+            latestQuestionByCircle.set(row.circle_id, row);
+          }
+        }
+
+        const latestQuestions = Array.from(latestQuestionByCircle.values());
+        const questionIds = latestQuestions.map((row) => row.id);
+
+        const { data: answerRows } = questionIds.length
+          ? await supabase
+              .from('question_answers')
+              .select('question_id')
+              .in('question_id', questionIds)
+              .eq('author_id', user.id)
+          : { data: [] as { question_id: string }[] };
+
+        const { data: recentPosts } = await supabase
+          .from('posts')
+          .select('circle_id')
+          .in('circle_id', circleIds)
+          .is('deleted_at', null)
+          .eq('moderation_status', 'ok')
+          .gte('created_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString());
+
+        const answeredIds = new Set((answerRows ?? []).map((row: any) => row.question_id));
+        const recentCounts = (recentPosts ?? []).reduce(
+          (acc: Record<string, number>, row: any) => {
+            acc[row.circle_id] = (acc[row.circle_id] ?? 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        );
+
+        const nextStatus: Record<string, RitualStatus> = {};
+        myCircles.forEach((circle) => {
+          const prompt = latestQuestions.find((row) => row.circle_id === circle.id);
+          const recentCount = recentCounts[circle.id] ?? 0;
+
+          if (prompt && !answeredIds.has(prompt.id)) {
+            nextStatus[circle.id] = { label: 'ritual waiting', tone: 'accent' };
+            return;
+          }
+          if (prompt) {
+            nextStatus[circle.id] = { label: 'answered today', tone: 'muted' };
+            return;
+          }
+          if (recentCount > 1) {
+            nextStatus[circle.id] = { label: `${recentCount} new moments`, tone: 'muted' };
+            return;
+          }
+          if (recentCount === 1) {
+            nextStatus[circle.id] = { label: 'one new moment', tone: 'muted' };
+            return;
+          }
+          nextStatus[circle.id] = { label: 'quiet today', tone: 'muted' };
+        });
+
+        setStatusById(nextStatus);
+      }
     }
     setLoading(false);
     setRefreshing(false);
@@ -53,6 +133,10 @@ export default function CirclesScreen() {
   };
 
   const hasCircles = circles.length > 0;
+  const waitingCount = useMemo(
+    () => Object.values(statusById).filter((status) => status.label === 'ritual waiting').length,
+    [statusById]
+  );
 
   return (
     <Screen padded={false}>
@@ -61,7 +145,11 @@ export default function CirclesScreen() {
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
-          <CircleRow circle={item} onPress={() => router.push(`/circles/${item.id}`)} />
+          <CircleRow
+            circle={item}
+            status={statusById[item.id]}
+            onPress={() => router.push(`/circles/${item.id}`)}
+          />
         )}
         contentContainerStyle={!hasCircles && !loading ? styles.emptyContainer : styles.list}
         refreshControl={
@@ -73,8 +161,14 @@ export default function CirclesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
+            <PalmiWordmark size={24} style={styles.wordmark} />
             <Text style={styles.title}>
               your <Text style={styles.titleItalic}>circles</Text>
+            </Text>
+            <Text style={styles.lede}>
+              {waitingCount > 0
+                ? `today's ritual is tagged on each circle. ${waitingCount} ${waitingCount === 1 ? 'room is' : 'rooms are'} waiting.`
+                : 'open any room directly. ritual context stays visible without taking over navigation.'}
             </Text>
             {hasCircles && (
               <Text style={styles.count}>
@@ -125,7 +219,15 @@ function dotColorFor(id: string): string {
   return DOT_PALETTE[h % DOT_PALETTE.length] ?? DOT_PALETTE[0] ?? '#E8C5A0';
 }
 
-function CircleRow({ circle, onPress }: { circle: Circle; onPress: () => void }) {
+function CircleRow({
+  circle,
+  status,
+  onPress,
+}: {
+  circle: Circle;
+  status?: RitualStatus;
+  onPress: () => void;
+}) {
   const count = circle.member_count ?? 1;
   const meta =
     count <= 1 ? 'just you — invite someone' : `${count} ${count === 1 ? 'person' : 'people'}`;
@@ -139,6 +241,23 @@ function CircleRow({ circle, onPress }: { circle: Circle; onPress: () => void })
         <Text style={styles.rowTitle} numberOfLines={1}>
           {circle.name}
         </Text>
+        {status ? (
+          <View
+            style={[
+              styles.statusPill,
+              status.tone === 'accent' ? styles.statusPillAccent : styles.statusPillMuted,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                status.tone === 'accent' ? styles.statusTextAccent : styles.statusTextMuted,
+              ]}
+            >
+              {status.label}
+            </Text>
+          </View>
+        ) : null}
         <Text style={styles.rowMeta} numberOfLines={1}>
           {meta}
         </Text>
@@ -196,6 +315,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     marginBottom: spacing.sm,
   },
+  wordmark: {
+    marginBottom: spacing.md,
+  },
   title: {
     fontFamily: typography.fontSerif,
     fontSize: typography.display + 4,
@@ -206,6 +328,14 @@ const styles = StyleSheet.create({
   titleItalic: {
     fontFamily: typography.fontSerifItalic,
     color: colors.accent,
+  },
+  lede: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.body,
+    color: colors.inkMuted,
+    lineHeight: typography.body * typography.lineRelaxed,
+    maxWidth: 340,
+    marginTop: spacing.sm,
   },
   count: {
     fontFamily: typography.fontSans,
@@ -236,7 +366,7 @@ const styles = StyleSheet.create({
   },
   rowText: {
     flex: 1,
-    gap: 2,
+    gap: spacing.xs,
   },
   rowTitle: {
     fontFamily: typography.fontSerif,
@@ -247,6 +377,29 @@ const styles = StyleSheet.create({
   rowMeta: {
     fontFamily: typography.fontSans,
     fontSize: typography.caption,
+    color: colors.inkMuted,
+  },
+  statusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
+  statusPillAccent: {
+    backgroundColor: '#F3E2DE',
+  },
+  statusPillMuted: {
+    backgroundColor: colors.bgPanel,
+  },
+  statusText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    letterSpacing: 0.2,
+  },
+  statusTextAccent: {
+    color: colors.accent,
+  },
+  statusTextMuted: {
     color: colors.inkMuted,
   },
   rowArrow: {

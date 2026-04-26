@@ -164,7 +164,6 @@ export default function OnboardingScreen() {
                   onChangeText={setName}
                   placeholder="maya"
                   autoCapitalize="none"
-                  autoFocus
                   error={error}
                   maxLength={40}
                 />

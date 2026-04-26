@@ -439,6 +439,15 @@ h1 em {
   overflow: hidden;
 }
 
+.phone-wordmark {
+  font-family: var(--font-serif), serif;
+  font-size: 14px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin-top: 4px;
+  margin-bottom: 14px;
+}
+
 /* Serif greeting — large, 2 lines */
 .phone-greeting {
   font-family: var(--font-serif), serif;
@@ -447,7 +456,130 @@ h1 em {
   line-height: 1.1;
   letter-spacing: -0.03em;
   color: var(--ink);
-  margin: 6px 0 18px;
+  margin: 0 0 10px;
+}
+
+.phone-lede {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+  margin-bottom: 14px;
+  max-width: 220px;
+}
+
+.phone-summary-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.phone-summary-stat {
+  min-width: 0;
+}
+
+.phone-summary-value {
+  display: block;
+  font-family: var(--font-serif), serif;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+
+.phone-summary-label {
+  display: block;
+  font-size: 9px;
+  line-height: 1.25;
+  color: var(--ink-faint);
+}
+
+.phone-focus-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.phone-focus-label {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  margin-bottom: 6px;
+}
+
+.phone-focus-title {
+  font-family: var(--font-serif), serif;
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.phone-focus-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.phone-focus-circle {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.phone-focus-meta {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.phone-focus-body {
+  font-family: var(--font-serif), serif;
+  font-size: 15px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.phone-focus-note {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+  margin-bottom: 6px;
+}
+
+.phone-focus-helper {
+  display: block;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+.phone-focus-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 /* Section header row: label left, link right */
@@ -462,7 +594,7 @@ h1 em {
   font-size: 10px;
   color: var(--ink-faint);
   letter-spacing: 0.14em;
-  text-transform: lowercase;
+  text-transform: uppercase;
   margin-bottom: 10px;
 }
 .phone-section-link {
@@ -471,18 +603,64 @@ h1 em {
   font-weight: 500;
 }
 
-/* Circle cards — horizontal, rounded boxes with serif name + meta */
-.phone-circles-row {
+.phone-row-viewport {
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.phone-row-track {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  width: max-content;
 }
-.phone-circle-card {
-  flex: 1;
-  min-width: 0;
+
+.phone-row-track-secondary {
+  padding-right: 40px;
+}
+
+.phone-row-track-circles {
+  padding-right: 48px;
+}
+
+.phone-secondary-card {
+  width: 176px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.phone-secondary-circle {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.phone-secondary-body {
+  font-family: var(--font-serif), serif;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.phone-secondary-action {
+  font-size: 10px;
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+/* Circle cards — horizontal, rounded boxes with serif name + meta */
+.phone-circle-card {
+  width: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -497,15 +675,31 @@ h1 em {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.phone-circle-card-meta {
+.phone-circle-card-status {
   font-size: 10px;
-  color: var(--ink-faint);
+  color: var(--accent);
+  font-weight: 500;
+}
+.phone-feed-head {
+  padding-top: 4px;
+  margin-bottom: 2px;
 }
 
-.phone-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0 14px;
+.phone-feed-title {
+  display: block;
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.phone-feed-note {
+  display: block;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+  margin-bottom: 8px;
 }
 
 /* Activity feed rows */

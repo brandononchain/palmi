@@ -32,7 +32,7 @@ import { colors, radius, spacing, typography } from '@/theme/tokens';
 
 interface MemberRow {
   user_id: Uuid;
-  role: 'member' | 'owner';
+  role: 'member' | 'co_host' | 'owner';
   joined_at: IsoDate;
   display_name: string;
   avatar_url: string | null;
@@ -134,7 +134,9 @@ export default function CircleInfoScreen() {
     void load();
   }, [load]);
 
-  const isOwner = members.find((m) => m.user_id === user?.id)?.role === 'owner';
+  const currentRole = members.find((m) => m.user_id === user?.id)?.role ?? 'member';
+  const isOwner = currentRole === 'owner';
+  const isHost = currentRole === 'owner' || currentRole === 'co_host';
 
   const handleCopy = async () => {
     if (!circle?.invite_code) return;
@@ -221,6 +223,24 @@ export default function CircleInfoScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.roleCard, isHost && styles.roleCardHost]}>
+          <Text style={styles.roleCardLabel}>{isHost ? 'your role here' : 'your place here'}</Text>
+          <Text style={styles.roleCardTitle}>
+            {currentRole === 'owner'
+              ? 'you’re holding this circle.'
+              : currentRole === 'co_host'
+                ? 'you’re helping hold this circle.'
+                : 'you’re part of this circle.'}
+          </Text>
+          <Text style={styles.roleCardBody}>
+            {currentRole === 'owner'
+              ? 'shape the threshold, rename the room, decide who can find it, and keep things calm.'
+              : currentRole === 'co_host'
+                ? 'you can help keep the room steady, respond to what needs tending, and guide its rhythm.'
+                : 'tune your notifications, keep the invite code close to the room, and leave quietly if you ever need to.'}
+          </Text>
+        </View>
+
         {/* Name */}
         <Pressable
           onPress={isOwner ? () => setRenameOpen(true) : undefined}
@@ -242,7 +262,11 @@ export default function CircleInfoScreen() {
           >
             <Text style={styles.copyBtnText}>{copied ? 'copied' : 'copy'}</Text>
           </Pressable>
-          <Text style={styles.inviteHint}>Share this code with people you want in the circle.</Text>
+          <Text style={styles.inviteHint}>
+            {isHost
+              ? 'Share this code with people you want in the circle.'
+              : 'Keep this code close to the room unless a host wants it shared.'}
+          </Text>
         </View>
 
         {/* Members */}
@@ -432,7 +456,9 @@ function MemberRowItem({ member, isMe }: { member: MemberRow; isMe: boolean }) {
             {member.display_name}
             {isMe ? ' (you)' : ''}
           </Text>
-          {member.role === 'owner' && <Text style={styles.ownerBadge}>owner</Text>}
+          {member.role !== 'member' && (
+            <Text style={styles.ownerBadge}>{member.role === 'owner' ? 'host' : 'co-host'}</Text>
+          )}
         </View>
         <Text style={styles.memberJoined}>joined {joined}</Text>
       </View>
@@ -513,7 +539,6 @@ function RenameSheet({
           <TextInput
             value={name}
             onChangeText={(t) => t.length <= 40 && setName(t)}
-            autoFocus
             placeholder="Circle name"
             placeholderTextColor={colors.inkFaint}
             style={styles.sheetInput}
@@ -859,6 +884,36 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxxl,
     gap: spacing.xl,
+  },
+
+  roleCard: {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  roleCardHost: {
+    backgroundColor: colors.bgPanel,
+  },
+  roleCardLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro - 2,
+    color: colors.inkFaint,
+    letterSpacing: 1.5,
+  },
+  roleCardTitle: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.subtitle,
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
+  roleCardBody: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+    lineHeight: 18,
   },
 
   // Name

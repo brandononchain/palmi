@@ -12,6 +12,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { Button } from '@/components/Button';
+import { PalmiWordmark } from '@/components/Brand';
 import { FadeUpView } from '@/components/FadeUpView';
 import { Screen } from '@/components/Screen';
 import { useAuth } from '@/hooks/useAuth';
@@ -304,11 +305,12 @@ export default function HomeScreen() {
           <View>
             <FadeUpView>
               <View style={styles.header}>
+                <PalmiWordmark size={24} style={styles.wordmark} />
                 <Text style={styles.greeting}>{greetingText}</Text>
                 <Text style={styles.lede}>
                   {hasCircles
                     ? unansweredCount > 0
-                      ? 'start where someone is quietly waiting on you.'
+                      ? 'today’s ritual is tagged in your circles. start anywhere that feels right.'
                       : 'nothing loud here. just the rooms that moved today.'
                     : 'start one small room, or find one that already fits.'}
                 </Text>
@@ -419,8 +421,8 @@ function FocusRitualCard({
   const note = prompt.answered
     ? 'your room kept moving. go back in softly.'
     : unansweredCount > 1
-      ? `${unansweredCount} rooms are waiting. begin with this one.`
-      : 'one room is quietly waiting on you.';
+      ? `${unansweredCount} rooms have a ritual open. this is the closest one to begin with.`
+      : 'one room has a ritual open right now.';
 
   return (
     <View style={styles.focusWrap}>
@@ -433,6 +435,9 @@ function FocusRitualCard({
         </View>
         <Text style={styles.focusBody}>{prompt.question_text}</Text>
         <Text style={styles.focusNote}>{note}</Text>
+        <Text style={styles.focusHelper}>
+          the same ritual status is tagged in your circles list.
+        </Text>
         <Button
           onPress={onOpen}
           fullWidth={false}
@@ -601,6 +606,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.sm,
   },
+  wordmark: {
+    marginBottom: spacing.md,
+  },
   greeting: {
     fontFamily: typography.fontSerif,
     fontSize: typography.display + 4,
@@ -698,6 +706,12 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.inkMuted,
     lineHeight: typography.caption * typography.lineRelaxed,
+  },
+  focusHelper: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    lineHeight: typography.micro * typography.lineRelaxed,
   },
   secondaryWrap: {
     paddingBottom: spacing.md,

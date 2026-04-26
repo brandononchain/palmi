@@ -103,43 +103,104 @@ export default function LandingPage() {
                 </div>
 
                 <div className="phone-body">
+                  <div className="phone-wordmark">palmi</div>
+
                   <h3 className="phone-greeting">
                     good evening,
                     <br />
                     maya.
                   </h3>
 
+                  <p className="phone-lede">
+                    today&apos;s ritual is tagged in your circles. start anywhere that feels right.
+                  </p>
+
+                  <div className="phone-summary-card">
+                    <div className="phone-summary-stat">
+                      <span className="phone-summary-value">2</span>
+                      <span className="phone-summary-label">waiting on you</span>
+                    </div>
+                    <div className="phone-summary-stat">
+                      <span className="phone-summary-value">3</span>
+                      <span className="phone-summary-label">rooms open</span>
+                    </div>
+                    <div className="phone-summary-stat">
+                      <span className="phone-summary-value">3</span>
+                      <span className="phone-summary-label">recent moments</span>
+                    </div>
+                  </div>
+
+                  <div className="phone-focus-card">
+                    <span className="phone-focus-label">today&apos;s ritual</span>
+                    <h4 className="phone-focus-title">start here.</h4>
+                    <div className="phone-focus-row">
+                      <span className="phone-focus-circle">the group chat</span>
+                      <span className="phone-focus-meta">waiting</span>
+                    </div>
+                    <p className="phone-focus-body">what felt unexpectedly generous this week?</p>
+                    <p className="phone-focus-note">
+                      2 rooms have a ritual open. this is the closest one to begin with.
+                    </p>
+                    <span className="phone-focus-helper">
+                      the same ritual status is tagged in your circles list.
+                    </span>
+                    <span className="phone-focus-button">answer now</span>
+                  </div>
+
+                  <div className="phone-section-head">
+                    <span className="phone-section-label">also waiting</span>
+                  </div>
+
+                  <div className="phone-row-viewport">
+                    <div className="phone-row-track phone-row-track-secondary">
+                      <div className="phone-secondary-card">
+                        <span className="phone-secondary-circle">studio 3</span>
+                        <span className="phone-secondary-body">
+                          what part of your process feels steadier now?
+                        </span>
+                        <span className="phone-secondary-action">answer</span>
+                      </div>
+                      <div className="phone-secondary-card">
+                        <span className="phone-secondary-circle">sunday runs</span>
+                        <span className="phone-secondary-body">
+                          what are you carrying into the weekend?
+                        </span>
+                        <span className="phone-secondary-action">open circle</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="phone-section-head">
                     <span className="phone-section-label">your circles</span>
                     <span className="phone-section-link">see all</span>
                   </div>
 
-                  <div className="phone-circles-row">
-                    <div className="phone-circle-card">
-                      <span className="phone-circle-card-name">the group chat</span>
-                      <span className="phone-circle-card-meta">6 people</span>
-                    </div>
-                    <div className="phone-circle-card">
-                      <span className="phone-circle-card-name">studio 3</span>
-                      <span className="phone-circle-card-meta">4 people</span>
+                  <div className="phone-row-viewport">
+                    <div className="phone-row-track phone-row-track-circles">
+                      <div className="phone-circle-card">
+                        <span className="phone-circle-card-name">the group chat</span>
+                        <span className="phone-circle-card-status">question waiting</span>
+                        <span className="phone-circle-card-meta">6 people</span>
+                      </div>
+                      <div className="phone-circle-card">
+                        <span className="phone-circle-card-name">studio 3</span>
+                        <span className="phone-circle-card-status">answered today</span>
+                        <span className="phone-circle-card-meta">4 people</span>
+                      </div>
+                      <div className="phone-circle-card">
+                        <span className="phone-circle-card-name">sunday runs</span>
+                        <span className="phone-circle-card-status">one new moment</span>
+                        <span className="phone-circle-card-meta">5 people</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="phone-divider" />
-
-                  <div className="phone-section-head">
-                    <span className="phone-section-label">today&apos;s ritual</span>
-                  </div>
-
-                  <div className="phone-circle-card" style={{ marginBottom: 14 }}>
-                    <span className="phone-circle-card-name">the group chat</span>
-                    <span className="phone-activity-body">
-                      what felt unexpectedly generous this week?
+                  <div className="phone-feed-head">
+                    <span className="phone-feed-title">recently moved</span>
+                    <span className="phone-feed-note">
+                      after the question, this is what shifted.
                     </span>
-                    <span className="phone-circle-card-meta">answer now</span>
                   </div>
-
-                  <div className="phone-section-label">after the question</div>
 
                   <div className="phone-activity">
                     <div className="phone-activity-head">

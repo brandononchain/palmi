@@ -107,7 +107,6 @@ export default function PhoneScreen() {
               placeholder="(555) 123-4567"
               keyboardType="phone-pad"
               autoComplete="tel"
-              autoFocus
               error={error}
             />
             <Button onPress={handleContinue} loading={loading || checking}>

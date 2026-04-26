@@ -300,6 +300,7 @@ export default function CircleFeedScreen() {
 
   const showMentionList = mentionQuery !== null && filteredMembers.length > 0;
   const currentMember = members.find((member) => member.id === user?.id) ?? null;
+  const isHost = currentMember?.role === 'owner' || currentMember?.role === 'co_host';
   const roleLabel =
     currentMember?.role === 'owner'
       ? 'host'
@@ -308,7 +309,13 @@ export default function CircleFeedScreen() {
         : 'member';
   const memberCount = circle?.member_count ?? members.length;
   const circleSummary = getCircleSummary(circle, circleProfile);
-  const visibleMembers = members.slice(0, 4);
+  const featuredMembers = [...members].sort((left, right) => {
+    const rank = { owner: 0, co_host: 1, member: 2 } as const;
+    return (
+      rank[left.role] - rank[right.role] || left.display_name.localeCompare(right.display_name)
+    );
+  });
+  const visibleMembers = featuredMembers.slice(0, 4);
   const overflowMembers = Math.max(0, members.length - visibleMembers.length);
 
   return (
@@ -390,7 +397,10 @@ export default function CircleFeedScreen() {
               <FadeUpView delay={motion.stagger * 3}>
                 <CircleContextCard
                   members={visibleMembers}
+                  memberCount={memberCount}
                   overflowMembers={overflowMembers}
+                  isHost={isHost}
+                  roleLabel={roleLabel}
                   onOpenRecaps={() => router.push(`/circles/${id}/recaps`)}
                   onOpenInfo={() => router.push(`/circles/${id}/info`)}
                 />
@@ -561,19 +571,59 @@ function QuietCard({ onOpenInfo }: { onOpenInfo: () => void }) {
 
 function CircleContextCard({
   members,
+  memberCount,
   overflowMembers,
+  isHost,
+  roleLabel,
   onOpenRecaps,
   onOpenInfo,
 }: {
   members: Member[];
+  memberCount: number;
   overflowMembers: number;
+  isHost: boolean;
+  roleLabel: string;
   onOpenRecaps: () => void;
   onOpenInfo: () => void;
 }) {
+  const hostCount = members.filter((member) => member.role !== 'member').length;
+  const hostNames = members
+    .filter((member) => member.role !== 'member')
+    .map((member) => member.display_name)
+    .slice(0, 2);
+
+  const hostCopy =
+    hostNames.length > 0
+      ? `kept by ${hostNames.join(hostNames.length > 1 ? ' and ' : '')}.`
+      : 'kept small on purpose.';
+
+  const introTitle = isHost ? 'you help hold this room.' : 'you belong in this room.';
+  const introBody = isHost
+    ? `${memberCount} ${memberCount === 1 ? 'person' : 'people'} here. you’re in as ${roleLabel}. ${hostCopy} shape the threshold, invite path, and settings with care.`
+    : `${memberCount} ${memberCount === 1 ? 'person' : 'people'} here. you’re in as ${roleLabel}. ${hostCopy}`;
+
   return (
     <View style={styles.contextWrap}>
-      <View style={styles.contextCard}>
-        <Text style={styles.contextLabel}>in this room</Text>
+      <View style={[styles.contextCard, isHost && styles.contextCardHost]}>
+        <Text style={styles.contextLabel}>{isHost ? 'stewarding this room' : 'in this room'}</Text>
+        <View style={styles.contextIntro}>
+          <Text style={styles.contextTitle}>{introTitle}</Text>
+          <Text style={styles.contextBody}>{introBody}</Text>
+        </View>
+        <View style={styles.contextStats}>
+          <View style={[styles.contextStatPill, isHost && styles.contextStatPillHost]}>
+            <Text style={styles.contextStatValue}>{memberCount}</Text>
+            <Text style={styles.contextStatLabel}>people</Text>
+          </View>
+          <View style={[styles.contextStatPill, isHost && styles.contextStatPillHost]}>
+            <Text style={styles.contextStatValue}>{hostCount}</Text>
+            <Text style={styles.contextStatLabel}>{hostCount === 1 ? 'host' : 'hosts'}</Text>
+          </View>
+          <View style={[styles.contextStatPill, isHost && styles.contextStatPillHost]}>
+            <Text style={styles.contextStatValue}>{roleLabel}</Text>
+            <Text style={styles.contextStatLabel}>{isHost ? 'your role' : 'your place'}</Text>
+          </View>
+        </View>
         <View style={styles.memberWrap}>
           {members.map((member) => (
             <View key={member.id} style={styles.memberChip}>
@@ -582,7 +632,14 @@ function CircleContextCard({
                   {member.display_name.charAt(0).toUpperCase()}
                 </Text>
               </View>
-              <Text style={styles.memberChipText}>{member.display_name}</Text>
+              <View style={styles.memberTextWrap}>
+                <Text style={styles.memberChipText}>{member.display_name}</Text>
+                {member.role !== 'member' ? (
+                  <Text style={styles.memberRoleText}>
+                    {member.role === 'owner' ? 'host' : 'co-host'}
+                  </Text>
+                ) : null}
+              </View>
             </View>
           ))}
           {overflowMembers > 0 && (
@@ -592,12 +649,25 @@ function CircleContextCard({
           )}
         </View>
         <View style={styles.contextActions}>
-          <Button onPress={onOpenRecaps} variant="secondary" fullWidth={false}>
-            recaps
-          </Button>
-          <Button onPress={onOpenInfo} variant="ghost" fullWidth={false}>
-            circle info
-          </Button>
+          {isHost ? (
+            <>
+              <Button onPress={onOpenInfo} variant="secondary" fullWidth={false}>
+                manage circle
+              </Button>
+              <Button onPress={onOpenRecaps} variant="ghost" fullWidth={false}>
+                recaps
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onPress={onOpenRecaps} variant="secondary" fullWidth={false}>
+                recaps
+              </Button>
+              <Button onPress={onOpenInfo} variant="ghost" fullWidth={false}>
+                circle info
+              </Button>
+            </>
+          )}
         </View>
       </View>
     </View>
@@ -989,12 +1059,55 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  contextCardHost: {
+    backgroundColor: colors.bgPanel,
+  },
   contextLabel: {
     fontFamily: typography.fontSansMedium,
     fontSize: typography.micro,
     color: colors.inkFaint,
     textTransform: 'uppercase',
     letterSpacing: 1.3,
+  },
+  contextIntro: {
+    gap: spacing.xs,
+  },
+  contextTitle: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.subtitle,
+    color: colors.ink,
+  },
+  contextBody: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
+    lineHeight: typography.caption * typography.lineRelaxed,
+  },
+  contextStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  contextStatPill: {
+    minWidth: 92,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgPanel,
+    gap: 2,
+  },
+  contextStatPillHost: {
+    backgroundColor: colors.bgCard,
+  },
+  contextStatValue: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.body,
+    color: colors.ink,
+  },
+  contextStatLabel: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
   },
   memberWrap: {
     flexDirection: 'row',
@@ -1027,6 +1140,14 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
     fontSize: typography.caption,
     color: colors.ink,
+  },
+  memberTextWrap: {
+    gap: 1,
+  },
+  memberRoleText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.accent,
   },
   memberOverflowText: {
     fontFamily: typography.fontSansMedium,

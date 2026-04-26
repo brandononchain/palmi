@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -15,6 +15,8 @@ function TabIcon({ name, color }: { name: IconName; color: string }) {
 }
 
 export default function TabsLayout() {
+  const router = useRouter();
+
   return (
     <Tabs
       screenOptions={{
@@ -38,8 +40,15 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="circles"
+        listeners={{
+          tabPress: (event) => {
+            event.preventDefault();
+            router.replace('/(tabs)/circles');
+          },
+        }}
         options={{
           title: 'circles',
+          popToTopOnBlur: true,
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name={focused ? 'ellipse' : 'ellipse-outline'} color={color} />
           ),

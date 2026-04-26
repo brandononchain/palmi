@@ -43,9 +43,7 @@ export default function JoinCircleScreen() {
         <View style={styles.content}>
           <View style={styles.hero}>
             <Text style={styles.title}>join with a code.</Text>
-            <Text style={styles.lede}>
-              Ask a friend for their 6-character invite code.
-            </Text>
+            <Text style={styles.lede}>Ask a friend for their 6-character invite code.</Text>
           </View>
 
           <View style={styles.form}>
@@ -56,7 +54,6 @@ export default function JoinCircleScreen() {
               autoCapitalize="characters"
               autoCorrect={false}
               maxLength={6}
-              autoFocus
               error={error}
               style={styles.codeInput}
             />

@@ -20,6 +20,7 @@ import type {
   DiscoveredCircle,
   DiscoverResponse,
   DiscoveryQuota,
+  ParsedIntent,
   Uuid,
 } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
@@ -34,6 +35,12 @@ const SUGGESTIONS = [
 ];
 
 const REFINEMENTS = ['smaller group', 'more structured', 'more private', 'more local'];
+const SEARCH_STEPS = [
+  'reading what you asked for',
+  'mapping the shape and cadence you need',
+  'searching discoverable circles across the network',
+  'checking social fit before showing matches',
+];
 
 export default function FindCircleScreen() {
   const router = useRouter();
@@ -44,6 +51,9 @@ export default function FindCircleScreen() {
   const [error, setError] = useState<string | null>(null);
   const [requestTarget, setRequestTarget] = useState<DiscoveredCircle | null>(null);
   const [quota, setQuota] = useState<DiscoveryQuota | null>(null);
+  const [parsedIntent, setParsedIntent] = useState<ParsedIntent | null>(null);
+  const [lastSearchText, setLastSearchText] = useState('');
+  const [searchStepIndex, setSearchStepIndex] = useState(0);
 
   const trimmed = query.trim();
   const canSearch = trimmed.length >= 3 && !loading;
@@ -61,6 +71,19 @@ export default function FindCircleScreen() {
     void loadQuota();
   }, [loadQuota]);
 
+  useEffect(() => {
+    if (!loading) {
+      setSearchStepIndex(0);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setSearchStepIndex((current) => (current + 1) % SEARCH_STEPS.length);
+    }, 1100);
+
+    return () => clearInterval(timer);
+  }, [loading]);
+
   const runSearch = useCallback(
     async (explicitQuery?: string) => {
       const searchText = (explicitQuery ?? query).trim();
@@ -74,23 +97,32 @@ export default function FindCircleScreen() {
       setError(null);
       setHasSearched(true);
       setQuery(searchText);
+      setLastSearchText(searchText);
 
       try {
         const { data, error: fnError } = await supabase.functions.invoke('discover-circles', {
           body: { query_text: searchText },
         });
-        const payload = data as DiscoverResponse | null;
+        const payload = data as (DiscoverResponse & { error?: string }) | null;
 
         if (fnError) {
           setResults([]);
-          setError('That didn’t run through. Try again in a moment.');
+          setParsedIntent(null);
+          if (payload?.quota) setQuota(payload.quota);
+          setError(
+            payload?.error === 'discovery_quota_reached'
+              ? 'You’ve used this month’s introductions. Premium+ keeps the network open.'
+              : 'Palmi couldn’t search the network just now. Try again in a moment.'
+          );
         } else {
           setResults(payload?.results ?? []);
+          setParsedIntent(payload?.parsed_intent ?? null);
           if (payload?.quota) setQuota(payload.quota);
         }
       } catch {
         setResults([]);
-        setError('That didn’t run through. Try again in a moment.');
+        setParsedIntent(null);
+        setError('Palmi couldn’t search the network just now. Try again in a moment.');
       } finally {
         setLoading(false);
         void loadQuota();
@@ -109,6 +141,7 @@ export default function FindCircleScreen() {
     setQuery(text);
     setError(null);
     setHasSearched(false);
+    setParsedIntent(null);
   };
 
   const applyRefinement = (text: string) => {
@@ -140,8 +173,8 @@ export default function FindCircleScreen() {
             <Text style={styles.composeLabel}>step one</Text>
             <Text style={styles.composeTitle}>describe the room you need.</Text>
             <Text style={styles.composeBody}>
-              say it plainly. palmi looks for shape, cadence, and social fit across the circles that
-              chose to be findable.
+              say it plainly. palmi ai actively searches the network for circles that match the
+              shape, cadence, and social fit you need.
             </Text>
             <View style={styles.suggestionWrap}>
               {SUGGESTIONS.map((suggestion) => (
@@ -175,7 +208,6 @@ export default function FindCircleScreen() {
               placeholderTextColor={colors.inkFaint}
               multiline
               style={styles.input}
-              autoFocus
               returnKeyType="search"
               onSubmitEditing={() => void runSearch()}
               blurOnSubmit
@@ -188,16 +220,35 @@ export default function FindCircleScreen() {
                 loading={loading}
                 fullWidth={false}
               >
-                ask palmi
+                search with palmi
               </Button>
             </View>
           </View>
         </FadeUpView>
 
+        {loading && (
+          <FadeUpView delay={motion.stagger * 3}>
+            <View style={styles.searchingCard}>
+              <Text style={styles.searchingLabel}>palmi ai is searching</Text>
+              <Text style={styles.searchingTitle}>working across the circle network.</Text>
+              <Text style={styles.searchingBody}>{SEARCH_STEPS[searchStepIndex]}</Text>
+              {lastSearchText ? (
+                <Text style={styles.searchingMeta}>for: “{lastSearchText}”</Text>
+              ) : null}
+            </View>
+          </FadeUpView>
+        )}
+
         {error && <Text style={styles.errorText}>{error}</Text>}
 
-        {hasSearched && results.length > 0 && (
+        {hasSearched && !loading && parsedIntent && (
           <FadeUpView delay={motion.stagger * 3}>
+            <IntentCard parsedIntent={parsedIntent} />
+          </FadeUpView>
+        )}
+
+        {hasSearched && results.length > 0 && (
+          <FadeUpView delay={motion.stagger * 4}>
             <View style={styles.refineWrap}>
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionLabel}>tighten the fit</Text>
@@ -349,6 +400,45 @@ function EmptyResults({
   );
 }
 
+function IntentCard({ parsedIntent }: { parsedIntent: ParsedIntent }) {
+  const hasSignals =
+    !!parsedIntent.purpose ||
+    !!parsedIntent.audience ||
+    parsedIntent.subtopics.length > 0 ||
+    parsedIntent.constraints.length > 0;
+
+  if (!hasSignals) return null;
+
+  return (
+    <View style={styles.intentCard}>
+      <Text style={styles.intentLabel}>palmi heard</Text>
+      <Text style={styles.intentTitle}>this is the shape of what you asked for.</Text>
+      <View style={styles.intentWrap}>
+        {parsedIntent.purpose ? (
+          <View style={styles.intentChip}>
+            <Text style={styles.intentChipText}>purpose: {parsedIntent.purpose}</Text>
+          </View>
+        ) : null}
+        {parsedIntent.audience ? (
+          <View style={styles.intentChip}>
+            <Text style={styles.intentChipText}>around: {parsedIntent.audience}</Text>
+          </View>
+        ) : null}
+        {parsedIntent.subtopics.map((topic) => (
+          <View key={topic} style={styles.intentChip}>
+            <Text style={styles.intentChipText}>{topic}</Text>
+          </View>
+        ))}
+        {parsedIntent.constraints.map((constraint) => (
+          <View key={constraint} style={styles.intentChipMuted}>
+            <Text style={styles.intentChipTextMuted}>{constraint}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function RequestSheet({
   circle,
   onClose,
@@ -414,7 +504,6 @@ function RequestSheet({
           <TextInput
             value={intent}
             onChangeText={(text) => text.length <= 500 && setIntent(text)}
-            autoFocus
             multiline
             placeholder="i’m studying for the mcat in spring and would love a small group to check in weekly…"
             placeholderTextColor={colors.inkFaint}
@@ -560,6 +649,38 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     lineHeight: typography.caption * typography.lineRelaxed,
   },
+  searchingCard: {
+    backgroundColor: colors.bgPanel,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchingLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.accent,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  searchingTitle: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.title,
+    color: colors.ink,
+  },
+  searchingBody: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.body,
+    color: colors.inkMuted,
+    lineHeight: typography.body * typography.lineRelaxed,
+  },
+  searchingMeta: {
+    fontFamily: typography.fontSerifItalic,
+    fontSize: typography.caption,
+    color: colors.inkFaint,
+    marginTop: spacing.xs,
+  },
   inputBlock: {
     backgroundColor: colors.bgCard,
     borderRadius: radius.xl,
@@ -591,6 +712,55 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontSans,
     fontSize: typography.caption,
     color: colors.danger,
+  },
+  intentCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  intentLabel: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.micro,
+    color: colors.inkFaint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+  },
+  intentTitle: {
+    fontFamily: typography.fontSerif,
+    fontSize: typography.subtitle,
+    color: colors.ink,
+  },
+  intentWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  intentChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgPanel,
+  },
+  intentChipMuted: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  intentChipText: {
+    fontFamily: typography.fontSansMedium,
+    fontSize: typography.caption,
+    color: colors.ink,
+  },
+  intentChipTextMuted: {
+    fontFamily: typography.fontSans,
+    fontSize: typography.caption,
+    color: colors.inkMuted,
   },
   refineWrap: {
     gap: spacing.sm,

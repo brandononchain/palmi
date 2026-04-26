@@ -244,7 +244,6 @@ export default function ComposeScreen() {
             placeholder="What's on your mind?"
             placeholderTextColor={colors.inkFaint}
             multiline
-            autoFocus
             style={styles.textInput}
             textAlignVertical="top"
           />

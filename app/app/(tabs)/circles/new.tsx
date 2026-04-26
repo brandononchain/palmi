@@ -76,7 +76,6 @@ export default function NewCircleScreen() {
               value={name}
               onChangeText={setName}
               placeholder="dorm 4B"
-              autoFocus
               error={error}
               maxLength={40}
             />

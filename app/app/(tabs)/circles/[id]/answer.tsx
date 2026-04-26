@@ -204,7 +204,6 @@ export default function AnswerScreen() {
                 placeholder="your answer…"
                 placeholderTextColor={colors.inkFaint}
                 multiline
-                autoFocus
                 style={styles.textInput}
                 textAlignVertical="top"
               />

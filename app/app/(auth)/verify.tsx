@@ -49,7 +49,6 @@ export default function VerifyScreen() {
               autoComplete="sms-otp"
               textContentType="oneTimeCode"
               maxLength={6}
-              autoFocus
               error={error}
               style={styles.codeInput}
             />
