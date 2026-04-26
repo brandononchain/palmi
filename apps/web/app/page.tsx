@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { WaitlistForm } from './components/WaitlistForm';
 import { LandingViewTracker, TrackedFunnelLink } from './components/FunnelTracking';
 import { ScrollEffects } from './components/ScrollEffects';
@@ -109,6 +111,7 @@ export default function LandingPage() {
           </a>
           <div className="nav-links">
             <a href="#how">How it works</a>
+            <Link href="/knowledge">Knowledge</Link>
             <a href="#manifesto">Manifesto</a>
             <a href="/pricing">Pricing</a>
             <TrackedFunnelLink href="#waitlist" className="nav-cta" source="nav">
@@ -536,6 +539,7 @@ export default function LandingPage() {
             <span>palmi</span>
           </a>
           <div className="footer-links">
+            <Link href="/knowledge">Knowledge</Link>
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
             <a href="mailto:hi@palmi.app">Contact</a>

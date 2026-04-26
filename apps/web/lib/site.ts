@@ -15,4 +15,4 @@ export const SITE_KEYWORDS = [
   'relationship focused social app',
 ];
 
-export const PUBLIC_ROUTES = ['/', '/pricing', '/privacy', '/terms'] as const;
+export const PUBLIC_ROUTES = ['/', '/knowledge', '/pricing', '/privacy', '/terms'] as const;
