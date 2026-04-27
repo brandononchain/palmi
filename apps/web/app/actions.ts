@@ -1,6 +1,8 @@
 'use server';
 
 import { SITE_URL } from '@/lib/site';
+import { anonClient, serviceClient } from '@/lib/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface JoinWaitlistResult {
   ok: boolean;
@@ -54,6 +56,55 @@ async function postIntakeWebhook(path: string, payload: unknown) {
   }
 }
 
+function getWaitlistSupabaseClient(): SupabaseClient {
+  try {
+    return serviceClient();
+  } catch (serviceError) {
+    console.warn('waitlist service client unavailable; falling back to anon client', serviceError);
+    return anonClient();
+  }
+}
+
+async function saveWaitlistEmail(payload: {
+  email: string;
+  source: string;
+  referrer_url: string;
+  consent: boolean;
+}) {
+  const supabase = getWaitlistSupabaseClient();
+  const now = new Date().toISOString();
+
+  const { error } = await supabase.from('email_opt_ins').insert({
+    email: payload.email,
+    source: payload.source,
+    referrer_url: payload.referrer_url,
+    consent: payload.consent,
+    first_seen_at: now,
+    last_seen_at: now,
+  });
+
+  if (!error) return;
+
+  // If the address is already on the waitlist, treat it as success and refresh the source/timestamp.
+  if (error.code === '23505') {
+    const { error: updateError } = await supabase
+      .from('email_opt_ins')
+      .update({
+        source: payload.source,
+        referrer_url: payload.referrer_url,
+        consent: payload.consent,
+        last_seen_at: now,
+      })
+      .eq('email', payload.email);
+
+    // Anon fallback may not be allowed to update. That is fine; the email is already captured.
+    if (!updateError || updateError.code === '42501') return;
+    throw updateError;
+  }
+
+  throw error;
+}
+
 function normalizeWebsiteInput(value: string) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -91,13 +142,22 @@ export async function joinWaitlist(formData: FormData): Promise<JoinWaitlistResu
     return { ok: false, error: 'Invalid form.' };
   }
 
+  const payload = {
+    email,
+    source: source === 'hero' ? 'palmi_hero_waitlist' : 'palmi_waitlist_waitlist',
+    referrer_url: PALMI_REFERRER_URL,
+    consent: true,
+  };
+
   try {
-    await postIntakeWebhook('/webhooks/email-opt-in', {
-      email,
-      source: source === 'hero' ? 'palmi_hero_waitlist' : 'palmi_waitlist_waitlist',
-      referrer_url: PALMI_REFERRER_URL,
-      consent: true,
-    });
+    await saveWaitlistEmail(payload);
+
+    // Optional secondary intake hook. It should never block the Supabase opt-in.
+    if (INTAKE_WEBHOOK_URL) {
+      postIntakeWebhook('/webhooks/email-opt-in', payload).catch((error) => {
+        console.warn('waitlist intake webhook failed after Supabase save', error);
+      });
+    }
 
     return {
       ok: true,
