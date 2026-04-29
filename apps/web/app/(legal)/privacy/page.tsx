@@ -57,7 +57,8 @@ export default function PrivacyPage() {
         <ul className="legal-list">
           <li>
             <strong>Phone number.</strong> Used to sign you in and to verify you&rsquo;re a real
-            person. We send a one-time code by SMS at sign-in.
+            person. We send a one-time code by SMS at sign-in and keep the number on your account
+            for account integrity, abuse prevention, and account recovery.
           </li>
           <li>
             <strong>Profile.</strong> Your display name, optional bio, optional profile photo, and
@@ -75,8 +76,8 @@ export default function PrivacyPage() {
         <h3>Information we collect automatically</h3>
         <ul className="legal-list">
           <li>
-            <strong>Device &amp; app basics.</strong> Device type, OS version, app version, crash
-            reports, and coarse timestamps. Used to fix bugs and keep the app running.
+            <strong>Device &amp; app basics.</strong> Device type, OS version, app version, and
+            coarse timestamps. Used to fix bugs and keep the app running.
           </li>
           <li>
             <strong>Push tokens.</strong> If you opt into notifications, we store the device token
@@ -144,8 +145,11 @@ export default function PrivacyPage() {
             <strong>Expo</strong> &mdash; push notification delivery.
           </li>
           <li>
+            <strong>Stripe</strong> &mdash; subscription checkout and billing portal for paid plans.
+          </li>
+          <li>
             <strong>Model providers</strong> &mdash; we use large language models strictly for
-            content moderation and for drafting daily questions. We do not send your name, phone
+            content moderation, daily questions, and recap drafting. We do not send your name, phone
             number, or profile fields to these providers, and providers are prohibited from using
             our data for training.
           </li>

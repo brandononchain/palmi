@@ -124,6 +124,30 @@ palmi/
    ```
    Scan the QR with Expo Go on your phone.
 
+### Internal testing / store builds
+
+To ship beta builds through TestFlight and Google Play internal testing, the Expo app now expects:
+
+- `EXPO_EAS_PROJECT_ID`
+- `EXPO_IOS_BUNDLE_IDENTIFIER`
+- `EXPO_ANDROID_PACKAGE`
+- `EXPO_IOS_BUILD_NUMBER`
+- `EXPO_ANDROID_VERSION_CODE`
+
+Then from [app/app.config.ts](app/app.config.ts):
+
+```bash
+cd app
+npx eas login
+npx eas init
+npx eas build --platform ios --profile preview
+npx eas build --platform android --profile preview
+```
+
+Use `preview` for internal beta distribution and `production` when you're ready for App Store Connect and Play Console submission.
+
+See [APP_MARKETPLACE_RELEASE.md](APP_MARKETPLACE_RELEASE.md) for the full release checklist, exact EAS commands, store privacy answers, and the post-launch repo-privacy plan.
+
 ---
 
 ## Design principles
