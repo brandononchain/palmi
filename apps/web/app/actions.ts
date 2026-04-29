@@ -16,6 +16,19 @@ export interface InstitutionalInquiryResult {
   message?: string;
 }
 
+type WaitlistSource = 'hero' | 'cta';
+
+type WaitlistRow = {
+  id: string;
+  email_opt_in: boolean;
+  email_opted_in_at: string | null;
+};
+
+const WAITLIST_EMAIL_OPT_IN_SOURCES: Record<WaitlistSource, string> = {
+  hero: 'palmi_hero_waitlist',
+  cta: 'palmi_waitlist_waitlist',
+};
+
 // RFC-5322-ish; good enough for catching typos without rejecting valid addresses.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const WAITLIST_HONEYPOT_FIELD = 'company';
@@ -157,6 +170,53 @@ export async function joinWaitlist(formData: FormData): Promise<JoinWaitlistResu
       postIntakeWebhook('/webhooks/email-opt-in', payload).catch((error) => {
         console.warn('waitlist intake webhook failed after Supabase save', error);
       });
+    }
+
+    const sb = serviceClient();
+    const normalizedSource = source as WaitlistSource;
+    const optedInAt = new Date().toISOString();
+
+    const { data: existing, error: existingError } = await sb
+      .from('waitlist')
+      .select('id, email_opt_in, email_opted_in_at')
+      .eq('email', email)
+      .maybeSingle<WaitlistRow>();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existing) {
+      if (!existing.email_opt_in || !existing.email_opted_in_at) {
+        const { error: updateError } = await sb
+          .from('waitlist')
+          .update({
+            email_opt_in: true,
+            email_opted_in_at: existing.email_opted_in_at ?? optedInAt,
+            source: normalizedSource,
+          })
+          .eq('id', existing.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+      }
+
+      return {
+        ok: true,
+        message: "You're already on the list — we'll reach out when there's a spot for you.",
+      };
+    }
+
+    const { error: insertError } = await sb.from('waitlist').insert({
+      email,
+      source: normalizedSource,
+      email_opt_in: true,
+      email_opted_in_at: optedInAt,
+    });
+
+    if (insertError) {
+      throw insertError;
     }
 
     return {

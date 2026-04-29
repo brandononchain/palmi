@@ -239,7 +239,7 @@ Explicit cuts. Write them down so you don't argue with yourself later.
 
 ## Landing page (`apps/web`)
 
-`palmi.app` is a Next.js 15 app in `apps/web/`. The landing page is a straight port of `preview/index.html` with `next/font` serving Fraunces + Inter. Both waitlist forms (hero + CTA) hit a server action that inserts into `public.waitlist` via the anon key.
+`palmi.app` is a Next.js 15 app in `apps/web/`. The landing page is a straight port of `preview/index.html` with `next/font` serving Fraunces + Inter. Both waitlist forms (hero + CTA) hit a server action that writes into `public.waitlist` in Supabase.
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local

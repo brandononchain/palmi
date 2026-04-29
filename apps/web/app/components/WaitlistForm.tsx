@@ -45,7 +45,7 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
 
   if (done) {
     return (
-      <div className="form-success show" role="status">
+      <div className="form-success show" role="status" aria-live="polite">
         {successMessage}
       </div>
     );
@@ -72,8 +72,14 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
             className="input"
             placeholder="you@email.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (error) {
+                setError(null);
+              }
+            }}
             aria-invalid={error ? 'true' : 'false'}
+            aria-describedby={error ? `waitlist-error-${source}` : undefined}
             aria-label="Email address"
             autoComplete="email"
             disabled={pending}
@@ -90,7 +96,7 @@ export function WaitlistForm({ source }: { source: 'hero' | 'cta' }) {
         </div>
       </form>
       {error && (
-        <div className="form-error" role="alert">
+        <div className="form-error" role="alert" id={`waitlist-error-${source}`}>
           {error}
         </div>
       )}

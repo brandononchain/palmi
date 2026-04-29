@@ -1,10 +1,32 @@
 import Link from 'next/link';
 
+import { serviceClient } from '@/lib/supabase';
+
 import { WaitlistForm } from './components/WaitlistForm';
 import { LandingViewTracker, TrackedFunnelLink } from './components/FunnelTracking';
 import { ScrollEffects } from './components/ScrollEffects';
 
-const WAITLIST_COUNT = process.env.NEXT_PUBLIC_WAITLIST_COUNT ?? '2,847';
+export const revalidate = 300;
+
+const WAITLIST_COUNT_FALLBACK = process.env.NEXT_PUBLIC_WAITLIST_COUNT ?? '2,847';
+
+async function getWaitlistCountLabel() {
+  try {
+    const sb = serviceClient();
+    const { count, error } = await sb.from('waitlist').select('*', { count: 'exact', head: true });
+    if (error) {
+      throw error;
+    }
+
+    if (typeof count === 'number') {
+      return count.toLocaleString();
+    }
+  } catch (error) {
+    console.error('landing waitlist count', error);
+  }
+
+  return WAITLIST_COUNT_FALLBACK;
+}
 
 function HowCreateCirclePreview() {
   return (
@@ -97,7 +119,9 @@ function HowStayConnectedPreview() {
   );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const waitlistCountLabel = await getWaitlistCountLabel();
+
   return (
     <>
       <LandingViewTracker />
@@ -151,7 +175,7 @@ export default function LandingPage() {
                 <span className="meta-dot" />
                 <span className="meta-dot" />
               </div>
-              <span>{WAITLIST_COUNT} waiting for access</span>
+              <span>{waitlistCountLabel} waiting for access</span>
             </div>
           </div>
 
